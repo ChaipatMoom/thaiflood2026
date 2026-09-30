@@ -46,8 +46,7 @@ STATIONS_CONFIG = {
 # ==============================================================================
 def fetch_hii_dams():
     """
-    ดึงข้อมูลการระบายน้ำของเขื่อนขนาดใหญ่จากฐานข้อมูล HII TIWRM โดยตรง
-    ครอบคลุม: ศรีนครินทร์, วชิราลงกรณ, ป่าสักชลสิทธิ์, ขุนด่านฯ
+    ดึงข้อมูลเขื่อนหลักจาก HII EGAT Report พร้อมระบบค้นหาแบบ Flexible
     """
     url = "https://tiwrm.hii.or.th/DATA/REPORT/php/egat_dam.php"
     headers = {
@@ -70,30 +69,23 @@ def fetch_hii_dams():
         if resp.status_code == 200:
             html = resp.content.decode("tis-620", errors="ignore")
 
-            # กวาดแยกทีละแถว <tr> ในตาราง
-            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL | re.IGNORECASE)
-            for row in rows:
-                for thai_name, sid in dam_targets.items():
-                    if thai_name in row and sid not in dam_results:
-                        # ดึงตัวเลขทั้งหมดในแถวของเขื่อนนั้น
-                        cols = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL | re.IGNORECASE)
-                        clean_nums = []
-                        for c in cols:
-                            text = re.sub(r"<[^>]+>", "", c).strip().replace(",", "")
-                            try:
-                                val = float(text)
-                                clean_nums.append(val)
-                            except ValueError:
-                                pass
-
-                        # ในตารางเขื่อน คอลัมน์การระบายน้ำ (ล้าน ลบ.ม./วัน) มักอยู่ท้ายๆ
-                        # หาตัวเลขการระบายน้ำที่เป็นไปได้ (> 0 และ < 200 ล้าน ลบ.ม./วัน)
-                        for n in reversed(clean_nums):
-                            if 0.0 < n < 300.0:
-                                m3s = round((n * 1_000_000) / 86400)
-                                dam_results[sid] = m3s
-                                print(f"   ✓ [HII Dam Match] {thai_name} ({sid}): {m3s} ลบ.ม./วิ ({n} ล้าน ลบ.ม./วัน)")
-                                break
+            for thai_name, sid in dam_targets.items():
+                # ค้นหาแถวที่มีชื่อเขื่อน และดึงตัวเลขทศนิยมทั้งหมดในแถวนั้น
+                row_match = re.search(rf"<tr[^>]*>.*?(?:{thai_name}).*?</tr>", html, re.DOTALL | re.IGNORECASE)
+                if row_match:
+                    row_content = re.sub(r"<[^>]+>", " ", row_match.group(0))
+                    # ดึงตัวเลขทั้งหมดในแถว
+                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", row_content)]
+                    
+                    # ปริมาณการระบายน้ำของเขื่อนหลักมักอยู่ในช่วง 0.1 - 250 ล้าน ลบ.ม./วัน (คอลัมน์ท้ายๆ)
+                    valid_discharges = [n for n in nums if 0.0 < n < 300.0]
+                    if valid_discharges:
+                        mld = valid_discharges[-1]  # ดึงคอลัมน์ระบายน้ำล่าสุด
+                        m3s = round((mld * 1_000_000) / 86400)
+                        dam_results[sid] = m3s
+                        print(f"   ✓ [HII Dam Match] {thai_name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
+                else:
+                    print(f"   ⚠️ ไม่พบชื่อ '{thai_name}' ในตารางเขื่อน HII")
     except Exception as e:
         print(f"⚠️ ดึงข้อมูลเขื่อนจาก HII ขัดข้อง: {e}")
 
@@ -151,6 +143,9 @@ def scrape_hii_chaopraya():
 # 4. ดึงเขื่อนแม่กลอง (ตัดเลขสำนักงานชลประทานที่ 13 ออก)
 # ==============================================================================
 def scrape_maeklong_monitor():
+    """
+    ดึงข้อมูลเขื่อนแม่กลอง (K.10) จาก http://mkmonitor.ddns.net/
+    """
     url = "http://mkmonitor.ddns.net/"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
@@ -167,24 +162,27 @@ def scrape_maeklong_monitor():
             if "เขื่อนแม่กลอง" not in html and "K.10" not in html:
                 html = resp.content.decode("utf-8", errors="ignore")
 
-            # ตัดคำว่า 'สำนักงานชลประทานที่ 13' ออกก่อนนำไปค้นหาตัวเลข
+            # กรองตัดคำว่า สำนักงานชลประทานที่ 13
             clean_html = re.sub(r"สำนักงานชลประทานที่\s*\d+", "", html)
-
-            # ค้นหาคำว่า ระบาย หรือ ท้ายเขื่อน ตามด้วยตัวเลขระบายน้ำ (> 50 ลบ.ม./วิ)
-            pattern = r"(?:เขื่อนแม่กลอง|K\.?\s*10).*?(?:ระบาย|ท้าย|ปริมาณน้ำ|Q).*?([0-9]{2,4}(?:,[0-9]{3})*(?:\.[0-9]+)?)"
-            match = re.search(pattern, clean_html, re.DOTALL | re.IGNORECASE)
-
-            if match:
-                raw_val = match.group(1).replace(",", "")
-                val = float(raw_val)
-                if val >= 50:
-                    mk_results["maeklong_dam"] = round(val)
+            
+            # ดึงเฉพาะข้อความรอบๆ คำว่า แม่กลอง หรือ K.10
+            snippet_match = re.search(r"(?:เขื่อนแม่กลอง|K\.?\s*10).{1,250}", clean_html, re.DOTALL | re.IGNORECASE)
+            if snippet_match:
+                snippet = re.sub(r"<[^>]+>", " ", snippet_match.group(0))
+                nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", snippet)]
+                # อัตราการระบายท้ายเขื่อนแม่กลองปกติจะอยู่ในช่วง 50 - 3,500 ลบ.ม./วิ
+                valid_flows = [n for n in nums if 50.0 <= n <= 4000.0]
+                if valid_flows:
+                    mk_results["maeklong_dam"] = round(valid_flows[0])
                     print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
+                else:
+                    print(f"   ⚠️ พบส่วนเขื่อนแม่กลองแต่ไม่พบตัวเลขระบายน้ำที่เข้าเกณฑ์: {snippet[:120]}")
+            else:
+                print("   ⚠️ ไม่พบคำว่า 'เขื่อนแม่กลอง' หรือ 'K.10' ในหน้าเว็บ MK Monitor")
     except Exception as e:
         print(f"⚠️ ดึงข้อมูลจาก mkmonitor.ddns.net ขัดข้อง: {e}")
 
     return mk_results
-
 # ==============================================================================
 # 5. รวมข้อมูลและบันทึกลง Supabase
 # ==============================================================================
