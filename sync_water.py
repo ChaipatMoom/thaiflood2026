@@ -13,12 +13,12 @@ if sys.platform == "win32":
 # ดึงค่าจาก GitHub Secrets (เมื่อรันบนคลาวด์)
 # หากรันในเครื่องตัวเอง จะดึงค่า fallback ด้านหลังมาใช้งาน
 # ==============================================================================
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ycchozbszqxxmvxwdlag.supabase.co")
+SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # กรณีทดสอบรันในเครื่อง (Local) ถ้าไม่มีตัวแปรระบบ ให้ใช้ค่าสำรอง
 if not SUPABASE_KEY:
-    SUPABASE_KEY = "ไม่พบคีย์ SUPABASE_KEY ใน Environment Variables"
+    raise ValueError("ไม่พบ SUPABASE_KEY ใน Environment Variables")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
