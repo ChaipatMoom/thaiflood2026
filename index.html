@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ระบบผังการไหลของน้ำสู่ระดับอ่าวไทย (ThaiWater API Integrated)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* CSS Dash Animation จำลองน้ำไหล */
+    @keyframes riverFlow {
+      from { stroke-dashoffset: 40; }
+      to { stroke-dashoffset: 0; }
+    }
+    .flow-stream {
+      stroke-dasharray: 8 6;
+      animation: riverFlow 1.2s linear infinite;
+    }
+    .fade-out {
+      opacity: 0.15;
+      transition: opacity 0.3s ease;
+    }
+    .fade-in {
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+    <div>
+      <h1 class="text-xl md:text-2xl font-bold text-sky-400 flex items-center gap-2">
+        <span>🌊</span> ผังจำลองการระบายน้ำระดับประเทศสู่อ่าวไทย
+      </h1>
+      <p class="text-xs text-slate-400 mt-1">
+        เชื่อมต่อมาตรฐาน ThaiWater Standard API (<code>/Runoff</code> & <code>/LargesizedWaterResources</code>)
+      </p>
+    </div>
+
+    <!-- แถบควบคุม API และโหมดการแสดงผล -->
+    <div class="flex items-center gap-3">
+      <button id="btnFetchApi" onclick="fetchLiveThaiWaterData()" 
+              class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-semibold flex items-center gap-2 shadow">
+        <span id="apiSpinner" class="hidden animate-spin">⏳</span>
+        <span>🔄 อัปเดตข้อมูลสด (Fetch API)</span>
+      </button>
+      <button onclick="toggleConfigModal()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm text-slate-300">
+        ⚙️ ตั้งค่า API
+      </button>
+    </div>
+  </header>
+
+  <!-- Control & Filter Bar -->
+  <div class="bg-slate-800/60 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
+    <!-- River Basin Filter -->
+    <div class="flex items-center gap-2">
+      <span class="text-sm font-medium text-slate-300">เลือกสายน้ำ:</span>
+      <div class="inline-flex rounded-md shadow-sm bg-slate-700 p-1">
+        <button onclick="setBasin('all')" id="btn-all" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold bg-sky-600 text-white">ทั้งหมด</button>
+        <button onclick="setBasin('chao_phraya')" id="btn-chao_phraya" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">เจ้าพระยา</button>
+        <button onclick="setBasin('mae_klong')" id="btn-mae_klong" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">แม่กลอง (ตะวันตก)</button>
+        <button onclick="setBasin('bang_pakong')" id="btn-bang_pakong" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">บางปะกง (ตะวันออก)</button>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="text-xs text-slate-400 flex items-center gap-4">
+      <span>แหล่งข้อมูล: <b id="dataSourceTag" class="text-amber-400">Mock Data (พร้อมเชื่อมต่อ API)</b></span>
+      <span>อัปเดตล่าสุด: <span id="lastUpdated" class="text-slate-300">-</span></span>
+    </div>
+  </div>
+
+  <!-- Main Canvas / Schematic Diagram View -->
+  <main class="flex-1 overflow-auto p-4 md:p-8 flex justify-center items-start">
+    <div class="relative w-full max-w-5xl bg-slate-950/80 border border-slate-800 rounded-xl p-6 shadow-2xl overflow-hidden">
+      
+      <!-- SVG แม่น้ำและอนิเมชันน้ำไหล -->
+      <svg class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gulfGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#0284c7" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="#0369a1" stop-opacity="0.8"/>
+          </linearGradient>
+        </defs>
+
+        <!-- แม่น้ำเจ้าพระยา (กลาง) -->
+        <g id="path-chao_phraya">
+          <!-- C2 -> เจ้าพระยา -->
+          <path d="M 512 85 L 512 180" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-c2" class="flow-stream" d="M 512 85 L 512 180" stroke="#38bdf8" stroke-width="4" fill="none"/>
+          
+          <!-- เขื่อนเจ้าพระยา -> บางไทร -->
+          <path d="M 512 250 L 512 430" stroke="#0ea5e9" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-c13" class="flow-stream" d="M 512 250 L 512 430" stroke="#38bdf8" stroke-width="6" fill="none"/>
+
+          <!-- ป่าสัก/พระรามหก เข้าสมทบที่บางไทร -->
+          <path d="M 680 340 C 680 400, 525 380, 525 430" stroke="#0284c7" stroke-width="6" fill="none" opacity="0.4"/>
+          <path id="stream-rama6" class="flow-stream" d="M 680 340 C 680 400, 525 380, 525 430" stroke="#38bdf8" stroke-width="3" fill="none"/>
+
+          <!-- บางไทร -> อ่าวไทย -->
+          <path d="M 512 500 L 512 600" stroke="#0284c7" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-c29a" class="flow-stream" d="M 512 500 L 512 600" stroke="#38bdf8" stroke-width="8" fill="none"/>
+        </g>
+
+        <!-- แม่น้ำแม่กลอง (ฝั่งตะวันตก) -->
+        <g id="path-mae_klong">
+          <path d="M 180 230 L 180 360" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-maeklong-dam" class="flow-stream" d="M 180 230 L 180 360" stroke="#38bdf8" stroke-width="4" fill="none"/>
+
+          <path d="M 180 430 C 180 520, 320 580, 430 610" stroke="#0284c7" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-maeklong-sea" class="flow-stream" d="M 180 430 C 180 520, 320 580, 430 610" stroke="#38bdf8" stroke-width="5" fill="none"/>
+        </g>
+
+        <!-- แม่น้ำบางปะกง (ฝั่งตะวันออก) -->
+        <g id="path-bang_pakong">
+          <path d="M 840 230 L 840 360" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-bangpakong-dam" class="flow-stream" d="M 840 230 L 840 360" stroke="#38bdf8" stroke-width="4" fill="none"/>
+
+          <path d="M 840 430 C 840 520, 700 580, 590 610" stroke="#0284c7" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <path id="stream-bangpakong-sea" class="flow-stream" d="M 840 430 C 840 520, 700 580, 590 610" stroke="#38bdf8" stroke-width="5" fill="none"/>
+        </g>
+      </svg>
+
+      <!-- โหนดจุดตรวจวัดและเขื่อน (HTML Grid Components) -->
+      <div class="relative z-10 grid grid-cols-3 gap-6">
+
+        <!-- คอลัมน์ 1: แม่น้ำแม่กลอง -->
+        <div id="col-mae_klong" class="basin-col flex flex-col items-center gap-12">
+          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
+            แม่น้ำแม่กลอง (ตะวันตก)
+          </div>
+
+          <!-- เขื่อนศรีนครินทร์ / วชิราลงกรณ -->
+          <div id="node-srinagarind" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg">
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (A003)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนศรีนครินทร์</h4>
+            <div class="mt-2 text-xs text-slate-400">ระบายน้ำลงลำน้ำ</div>
+            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+
+          <!-- เขื่อนแม่กลอง -->
+          <div id="node-maeklong_dam" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-8">
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Runoff Station (A002)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนแม่กลอง (K.10)</h4>
+            <div class="mt-2 text-xs text-slate-400">ปริมาณน้ำไหลผ่าน</div>
+            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+        </div>
+
+        <!-- คอลัมน์ 2: แม่น้ำเจ้าพระยา (สายหลัก) -->
+        <div id="col-chao_phraya" class="basin-col flex flex-col items-center gap-8">
+          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
+            แม่น้ำเจ้าพระยา (แกนกลาง)
+          </div>
+
+          <!-- จุดที่ 1: สถานี C.2 นครสวรรค์ -->
+          <div id="node-C2" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg">
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.2 (A002)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)</h4>
+            <div class="mt-2 text-xs text-slate-400">ปริมาณน้ำไหลผ่าน</div>
+            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+
+          <!-- จุดที่ 2: เขื่อนเจ้าพระยา (ชัยนาท) -->
+          <div id="node-C13" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg">
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.13 (A002)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนเจ้าพระยา (ชัยนาท)</h4>
+            <div class="mt-2 text-xs text-slate-400">ระบายน้ำท้ายเขื่อน</div>
+            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+
+          <!-- จุดที่ 3: สถานี C.29A บางไทร -->
+          <div id="node-C29A" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-14">
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.29A (A002)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">สถานีบางไทร (อยุธยา)</h4>
+            <div class="mt-2 text-xs text-slate-400">จุดรวมน้ำก่อนเข้า กทม.</div>
+            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+        </div>
+
+        <!-- คอลัมน์ 3: แม่น้ำบางปะกง + ป่าสัก -->
+        <div id="col-bang_pakong" class="basin-col flex flex-col items-center gap-8">
+          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
+            แม่น้ำป่าสัก & บางปะกง (ตะวันออก)
+          </div>
+
+          <!-- เขื่อนป่าสักชลสิทธิ์ -->
+          <div id="node-pasak" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg">
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (A003)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนป่าสักชลสิทธิ์</h4>
+            <div class="mt-2 text-xs text-slate-400">ระบายน้ำลงแม่น้ำป่าสัก</div>
+            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+
+          <!-- เขื่อนพระรามหก (สมทบเข้าเจ้าพระยา) -->
+          <div id="node-rama6" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg">
+            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Weir / Runoff (A002)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนพระรามหก</h4>
+            <div class="mt-2 text-xs text-slate-400">ระบายน้ำสมทบเจ้าพระยา</div>
+            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+
+          <!-- แม่น้ำบางปะกง / เขื่อนขุนด่านฯ -->
+          <div id="node-khundan" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-14">
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (A003)</span>
+            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนขุนด่านปราการชล</h4>
+            <div class="mt-2 text-xs text-slate-400">ระบายน้ำสู่บางปะกง</div>
+            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ปลายน้ำ: อ่าวไทย (Gulf of Thailand Area) -->
+      <div class="mt-12 w-full h-24 rounded-lg border-2 border-dashed border-sky-500/40 bg-gradient-to-t from-sky-900/60 to-transparent flex items-center justify-center relative z-10">
+        <div class="text-center">
+          <span class="text-2xl">🌊</span>
+          <h3 class="font-black text-sky-300 tracking-wider">อ่าวไทย (GULF OF THAILAND)</h3>
+          <p class="text-xs text-sky-400/80">จุดระบายน้ำออกสู่ทะเลทั้ง 3 สายหลัก</p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Modal สำหรับตั้งค่าเชื่อมต่อ API สด -->
+  <div id="configModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-md w-full p-6 shadow-2xl">
+      <h3 class="text-lg font-bold text-sky-400 mb-4 flex items-center gap-2">
+        <span>⚙️</span> การตั้งค่าเชื่อมต่อ ThaiWater API
+      </h3>
+      <div class="space-y-4 text-sm">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Base API URL:</label>
+          <input type="text" id="cfgBaseUrl" value="https://api.my.go.th/twsapi/v1.0" 
+                 class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-200 text-xs font-mono" />
+          <p class="text-xs text-slate-500 mt-1">อ้างอิงตามเอกสารมาตรฐาน ThaiWater Service Base URL</p>
+        </div>
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Authorization Token / API Key:</label>
+          <input type="password" id="cfgApiKey" placeholder="ใส่ Bearer Token หรือ API Key ของ DGA/สสน." 
+                 class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-200 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="flex items-center gap-2 text-slate-300">
+            <input type="checkbox" id="cfgUseMockIfFailed" checked class="rounded text-sky-600 bg-slate-900" />
+            <span>ใช้ Mock Data อัตโนมัติเมื่อติด CORS หรือ API ออฟไลน์</span>
+          </label>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button onclick="toggleConfigModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">ปิด</button>
+        <button onclick="saveAndApplyConfig()" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded text-sm font-semibold">บันทึกและลองใหม่</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * กำหนดการจับคู่สถานี (Station Mapping) กับ API Resource ตาม ThaiWater Standard
+     */
+    const STATION_REGISTRY = {
+      // กลุ่มน้ำท่า (Resource: /Runoff - A002)
+      'C2': {
+        type: 'runoff',
+        stationCode: 'C.2',
+        agencyCode: 'RID',
+        name: 'สถานี C.2 นครสวรรค์',
+        warningFlow: 2800,
+        streamId: 'stream-c2',
+        mockValue: 2450
+      },
+      'C13': {
+        type: 'runoff',
+        stationCode: 'C.13',
+        agencyCode: 'RID',
+        name: 'เขื่อนเจ้าพระยา (ชัยนาท)',
+        warningFlow: 2000,
+        streamId: 'stream-c13',
+        mockValue: 2150
+      },
+      'C29A': {
+        type: 'runoff',
+        stationCode: 'C.29A',
+        agencyCode: 'RID',
+        name: 'สถานี C.29A บางไทร',
+        warningFlow: 3000,
+        streamId: 'stream-c29a',
+        mockValue: 2780
+      },
+      'rama6': {
+        type: 'runoff',
+        stationCode: 'RAMA6',
+        agencyCode: 'RID',
+        name: 'เขื่อนพระรามหก',
+        warningFlow: 600,
+        streamId: 'stream-rama6',
+        mockValue: 480
+      },
+      'maeklong_dam': {
+        type: 'runoff',
+        stationCode: 'K.10',
+        agencyCode: 'RID',
+        name: 'เขื่อนแม่กลอง',
+        warningFlow: 1000,
+        streamId: 'stream-maeklong-dam',
+        mockValue: 620
+      },
+
+      // กลุ่มเขื่อนขนาดใหญ่ (Resource: /LargesizedWaterResources - A003)
+      'pasak': {
+        type: 'dam',
+        waterResourcesCode: 'PASAK',
+        agencyCode: 'RID',
+        name: 'เขื่อนป่าสักชลสิทธิ์',
+        warningFlow: 600,
+        streamId: null,
+        mockValue: 420
+      },
+      'srinagarind': {
+        type: 'dam',
+        waterResourcesCode: 'SRINAGARIND',
+        agencyCode: 'EGAT',
+        name: 'เขื่อนศรีนครินทร์',
+        warningFlow: 800,
+        streamId: null,
+        mockValue: 310
+      },
+      'khundan': {
+        type: 'dam',
+        waterResourcesCode: 'KHUNDAN',
+        agencyCode: 'RID',
+        name: 'เขื่อนขุนด่านปราการชล',
+        warningFlow: 250,
+        streamId: 'stream-bangpakong-dam',
+        mockValue: 120
+      }
+    };
+
+    let config = {
+      baseUrl: 'https://api.my.go.th/twsapi/v1.0',
+      apiKey: '',
+      useMockIfFailed: true
+    };
+
+    /**
+     * ดึงข้อมูลจริงจาก ThaiWater Standard API
+     */
+    async function fetchLiveThaiWaterData() {
+      const spinner = document.getElementById('apiSpinner');
+      spinner.classList.remove('hidden');
+
+      let liveSuccess = false;
+      const headers = { 'Content-Type': 'application/json' };
+      if (config.apiKey) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      }
+
+      for (const [nodeId, station] of Object.entries(STATION_REGISTRY)) {
+        try {
+          let url = '';
+          // 1. เรียก API ตามประเภท Resource ที่ ThaiWater Standard กำหนดไว้
+          if (station.type === 'runoff') {
+            url = `${config.baseUrl}/Runoff?latest=true&stationCode=${station.stationCode}&agencyCode=${station.agencyCode}`;
+          } else {
+            url = `${config.baseUrl}/LargesizedWaterResources?latest=true&waterResourcesCode=${station.waterResourcesCode}`;
+          }
+
+          const response = await fetch(url, { headers });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+
+          // ดึงค่า discharge จาก response schema มาตรฐาน
+          let discharge = 0;
+          if (station.type === 'runoff') {
+            discharge = data.discharge || (data.data && data.data[0] ? data.data[0].discharge : 0);
+          } else {
+            discharge = data.outflow || data.discharge || (data.data && data.data[0] ? data.data[0].outflow : 0);
+          }
+
+          updateNodeUI(nodeId, discharge, station.warningFlow, station.streamId);
+          liveSuccess = true;
+        } catch (err) {
+          // หาก fetch ตรงไม่ได้ (เช่น รันบน client แล้วติด Browser CORS หรือไม่มี Token)
+          if (config.useMockIfFailed) {
+            applyMockFallback(nodeId, station);
+          }
+        }
+      }
+
+      spinner.classList.add('hidden');
+      document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('th-TH');
+      
+      const tag = document.getElementById('dataSourceTag');
+      if (liveSuccess) {
+        tag.textContent = 'ThaiWater Standard API (Live Connected)';
+        tag.className = 'text-emerald-400 font-bold';
+      } else {
+        tag.textContent = 'Mock Fallback (API Offline หรือ ติด CORS ในเบราว์เซอร์)';
+        tag.className = 'text-amber-400 font-bold';
+      }
+    }
+
+    /**
+     * กรณี Fallback หรือทดสอบ
+     */
+    function applyMockFallback(nodeId, station) {
+      // เพิ่มความผันแปรเล็กน้อยให้เห็นอนิเมชันปรับความเร็ว
+      const variance = Math.floor((Math.random() - 0.5) * 60);
+      const discharge = Math.max(50, station.mockValue + variance);
+      updateNodeUI(nodeId, discharge, station.warningFlow, station.streamId);
+    }
+
+    /**
+     * อัปเดตตัวเลข สี และความเร็ว Animation น้ำไหล
+     */
+    function updateNodeUI(nodeId, discharge, warningLevel, streamId) {
+      const nodeCard = document.getElementById(`node-${nodeId}`);
+      if (!nodeCard) return;
+
+      const valEl = nodeCard.querySelector('.flow-val');
+      valEl.innerHTML = `${discharge.toLocaleString()} <span class="text-xs font-normal">ลบ.ม./วิ</span>`;
+
+      // ปรับสีเตือนภัยตามเกณฑ์
+      if (discharge >= warningLevel) {
+        valEl.className = 'text-xl font-black text-rose-500 mt-0.5 flow-val';
+        nodeCard.classList.remove('border-slate-700', 'border-amber-500');
+        nodeCard.classList.add('border-rose-500', 'bg-rose-950/20');
+      } else if (discharge >= warningLevel * 0.8) {
+        valEl.className = 'text-xl font-black text-amber-400 mt-0.5 flow-val';
+        nodeCard.classList.remove('border-slate-700', 'border-rose-500');
+        nodeCard.classList.add('border-amber-500', 'bg-amber-950/20');
+      } else {
+        valEl.className = 'text-xl font-black text-emerald-400 mt-0.5 flow-val';
+        nodeCard.classList.remove('border-rose-500', 'border-amber-500');
+        nodeCard.classList.add('border-slate-700');
+      }
+
+      // ปรับความเร็ว Animation ตามความแรงของน้ำ
+      if (streamId) {
+        const streamEl = document.getElementById(streamId);
+        if (streamEl) {
+          // ยิ่งน้ำเยอะ ยิ่งไหลเร็ว (animation duration น้อยลง)
+          const duration = Math.max(0.3, Math.min(2.5, 4000 / discharge));
+          streamEl.style.animationDuration = `${duration.toFixed(2)}s`;
+        }
+      }
+    }
+
+    /**
+     * ฟังก์ชัน Filter สายน้ำ
+     */
+    function setBasin(basin) {
+      document.querySelectorAll('.basin-btn').forEach(btn => {
+        btn.classList.remove('bg-sky-600', 'text-white');
+        btn.classList.add('text-slate-300');
+      });
+      document.getElementById(`btn-${basin}`).classList.add('bg-sky-600', 'text-white');
+
+      const cols = {
+        'chao_phraya': ['col-chao_phraya', 'path-chao_phraya'],
+        'mae_klong': ['col-mae_klong', 'path-mae_klong'],
+        'bang_pakong': ['col-bang_pakong', 'path-bang_pakong']
+      };
+
+      if (basin === 'all') {
+        Object.values(cols).forEach(([colId, pathId]) => {
+          document.getElementById(colId).classList.remove('fade-out');
+          document.getElementById(pathId).classList.remove('fade-out');
+          document.getElementById(colId).classList.add('fade-in');
+          document.getElementById(pathId).classList.add('fade-in');
+        });
+      } else {
+        Object.entries(cols).forEach(([bName, [colId, pathId]]) => {
+          const colEl = document.getElementById(colId);
+          const pathEl = document.getElementById(pathId);
+          if (bName === basin) {
+            colEl.classList.remove('fade-out');
+            pathEl.classList.remove('fade-out');
+            colEl.classList.add('fade-in');
+            pathEl.classList.add('fade-in');
+          } else {
+            colEl.classList.remove('fade-in');
+            pathEl.classList.remove('fade-in');
+            colEl.classList.add('fade-out');
+            pathEl.classList.add('fade-out');
+          }
+        });
+      }
+    }
+
+    function toggleConfigModal() {
+      const modal = document.getElementById('configModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function saveAndApplyConfig() {
+      config.baseUrl = document.getElementById('cfgBaseUrl').value.trim();
+      config.apiKey = document.getElementById('cfgApiKey').value.trim();
+      config.useMockIfFailed = document.getElementById('cfgUseMockIfFailed').checked;
+      toggleConfigModal();
+      fetchLiveThaiWaterData();
+    }
+
+    // เริ่มต้นระบบทันทีที่โหลดเสร็จ
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchLiveThaiWaterData();
+    });
+  </script>
+</body>
+</html>
