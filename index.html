@@ -212,7 +212,7 @@
     /* SVG Canvas drag cursor */
     .canvas-draggable {
       cursor: grab;
-      touch-action: none;
+      touch-action: pan-y;
     }
 
     .canvas-draggable:active {
@@ -503,13 +503,6 @@
             class="w-8 h-8 rounded-lg bg-[#0d1830] hover:bg-cyan-600 text-cyan-400 hover:text-white font-bold flex items-center justify-center border border-[#1a2d52] active:scale-95 transition-all text-xs">
             ⟲
           </button>
-        </div>
-
-        <!-- Floating Quick Gesture Hint Badge -->
-        <div
-          class="absolute bottom-3 left-3 z-30 pointer-events-none bg-[#081022]/85 backdrop-blur px-2.5 py-1 rounded-lg border border-[#172544] text-[10px] sm:text-xs text-slate-300 flex items-center gap-1.5">
-          <span>👆</span>
-          <span>ลากเพื่อเลื่อนผัง • กดเลือกสายน้ำด้านบนเพื่อโฟกัสอัตโนมัติ</span>
         </div>
 
         <!-- UNIFIED VECTOR SCHEMATIC SVG (Pure Native SVG Elements, NO foreignObject) -->
@@ -1798,10 +1791,10 @@
       isDragging = false;
     }
 
-    viewport.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
+    //viewport.addEventListener('pointerdown', onPointerDown);
+    //window.addEventListener('pointermove', onPointerMove);
+    //window.addEventListener('pointerup', onPointerUp);
+    //window.addEventListener('pointercancel', onPointerUp);
 
     /**
      * Switching Year / Historical Benchmark Modes
