@@ -95,41 +95,84 @@ def scrape_hii_chaopraya():
 # 3. ดึงเขื่อนขนาดใหญ่ (กฟผ. และ ชลประทาน)
 # ==============================================================================
 def fetch_all_dams():
+    """
+    ดึงข้อมูลการระบายน้ำรายเขื่อน (กฟผ. และ กรมชลประทาน) จาก HII TIWRM
+    แก้ไขปัญหาการจับชนแถว 'รวม' และรองรับ HTML ที่ไม่มี </tr> ปิดแถว
+    """
     dam_results = {}
 
-    # 3.1 เขื่อน กฟผ. (ศรีนครินทร์, วชิราลงกรณ)
+    # --------------------------------------------------------------------------
+    # 3.1 เขื่อน กฟผ. (ศรีนครินทร์, วชิราลงกรณ) จาก egat_dam.php
+    # --------------------------------------------------------------------------
     egat_html = fetch_html_auto_encoding("https://tiwrm.hii.or.th/DATA/REPORT/php/egat_dam.php")
     if egat_html:
         print("📡 [HII EGAT Dams] เชื่อมต่อสำเร็จ")
-        egat_targets = {"ศรีนครินทร์": "srinagarind", "วชิราลงกรณ": "vajiralongkorn"}
-        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", egat_html, re.DOTALL | re.IGNORECASE)
-        for r in rows:
-            for name, sid in egat_targets.items():
-                if name in r and sid not in dam_results:
-                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", re.sub(r"<[^>]+>", " ", r))]
-                    valid = [n for n in nums if 0.0 < n < 300.0]
+        egat_targets = {
+            "ศรีนครินทร์": {"sid": "srinagarind", "max_mld": 45.0},
+            "วชิราลงกรณ": {"sid": "vajiralongkorn", "max_mld": 55.0}
+        }
+
+        # แยกแถวด้วย <tr เพื่อไม่ให้พึ่งพาแท็ก </tr> ที่ปิดไม่สมบูรณ์ในตารางเว็บราชการ
+        chunks = re.split(r"<tr[^>]*>", egat_html, flags=re.IGNORECASE)
+        for chunk in chunks:
+            # ข้ามแถวหัวตารางและแถวสรุปยอดรวม (Total) ท้ายตาราง
+            if "รวม" in chunk or "เฉลี่ย" in chunk:
+                continue
+
+            for name, conf in egat_targets.items():
+                sid = conf["sid"]
+                if name in chunk and sid not in dam_results:
+                    clean_text = re.sub(r"<[^>]+>", " ", chunk)
+                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", clean_text)]
+
+                    # กรองตัวเลขระบายน้ำรายวัน (ปกติ 0.0 - 45.0 ล้าน ลบ.ม./วัน)
+                    valid = [n for n in nums if 0.0 <= n <= conf["max_mld"]]
                     if valid:
-                        mld = valid[-1]  # คอลัมน์ระบายน้ำ (ล้าน ลบ.ม./วัน)
+                        mld = valid[-1]  # คอลัมน์ระบายน้ำมักอยู่ท้ายสุดของแถว
                         m3s = round((mld * 1_000_000) / 86400)
                         dam_results[sid] = m3s
                         print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
 
+    # --------------------------------------------------------------------------
     # 3.2 เขื่อน กรมชลประทาน (ป่าสักฯ, ขุนด่านฯ)
-    rid_html = fetch_html_auto_encoding("https://tiwrm.hii.or.th/DATA/REPORT/php/rid_dam.php")
+    # --------------------------------------------------------------------------
+    rid_urls = [
+        "https://tiwrm.hii.or.th/DATA/REPORT/php/rid_bigdam.php",
+        "https://tiwrm.hii.or.th/DATA/REPORT/php/rid_dam.php",
+        "https://tiwrm.hii.or.th/DATA/REPORT/php/dam_rid.php"
+    ]
+
+    rid_html = ""
+    for u in rid_urls:
+        content = fetch_html_auto_encoding(u)
+        if content and any(k in content for k in ["ป่าสัก", "ขุนด่าน"]):
+            rid_html = content
+            print(f"📡 [HII RID Dams] เชื่อมต่อสำเร็จ ({u.split('/')[-1]})")
+            break
+
     if rid_html:
-        print("📡 [HII RID Dams] เชื่อมต่อสำเร็จ")
-        rid_targets = {"ป่าสัก": "pasak", "ขุนด่าน": "khundan"}
-        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", rid_html, re.DOTALL | re.IGNORECASE)
-        for r in rows:
-            for name, sid in rid_targets.items():
-                if name in r and sid not in dam_results:
-                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", re.sub(r"<[^>]+>", " ", r))]
-                    valid = [n for n in nums if 0.0 < n < 300.0]
+        rid_targets = {
+            "ป่าสัก": {"sid": "pasak", "max_mld": 35.0},
+            "ขุนด่าน": {"sid": "khundan", "max_mld": 20.0}
+        }
+        chunks = re.split(r"<tr[^>]*>", rid_html, flags=re.IGNORECASE)
+        for chunk in chunks:
+            if "รวม" in chunk or "เฉลี่ย" in chunk:
+                continue
+
+            for name, conf in rid_targets.items():
+                sid = conf["sid"]
+                if name in chunk and sid not in dam_results:
+                    clean_text = re.sub(r"<[^>]+>", " ", chunk)
+                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", clean_text)]
+                    valid = [n for n in nums if 0.0 <= n <= conf["max_mld"]]
                     if valid:
                         mld = valid[-1]
                         m3s = round((mld * 1_000_000) / 86400)
                         dam_results[sid] = m3s
                         print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
+    else:
+        print("ℹ️ [HII RID Dams] ใช้ค่าระบายน้ำป่าสักจากผังเจ้าพระยา หรือค่าสำรอง")
 
     return dam_results
 
