@@ -1,392 +1,2132 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="th" class="h-full">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ระบบผังการไหลของน้ำสู่ระดับอ่าวไทย (Supabase Live Integrated)</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ผังระบายน้ำและจุดวิกฤต ลุ่มน้ำสู่อ่าวไทย (Interactive Schematic Dashboard)</title>
+
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Prompt & Sarabun -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&family=Sarabun:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            prompt: ['Prompt', 'sans-serif'],
+            sarabun: ['Sarabun', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              dark: '#050a15',
+              card: '#0a1224',
+              border: '#172544',
+              cyan: '#00e5ff',
+              blue: '#0284c7',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   <style>
-    /* CSS Dash Animation จำลองน้ำไหล */
-    @keyframes riverFlow {
-      from { stroke-dashoffset: 40; }
-      to { stroke-dashoffset: 0; }
+    body {
+      font-family: 'Sarabun', sans-serif;
+      user-select: none;
+      background-color: #050a15;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
     }
-    .flow-stream {
-      stroke-dasharray: 8 6;
-      animation: riverFlow 1.2s linear infinite;
+
+    h1,
+    h2,
+    h3,
+    h4,
+    .font-heading {
+      font-family: 'Prompt', sans-serif;
     }
-    .fade-out {
-      opacity: 0.15;
-      transition: opacity 0.3s ease;
+
+    /* CSS Keyframes for River Dash Flow Animation */
+    @keyframes riverFlowAnim {
+      from {
+        stroke-dashoffset: 80;
+      }
+
+      to {
+        stroke-dashoffset: 0;
+      }
     }
-    .fade-in {
-      opacity: 1;
-      transition: opacity 0.3s ease;
+
+    /* Spillway waterfall spray animation */
+    @keyframes spillwaySpray {
+      0% {
+        transform: translateY(-2px) scaleY(0.9);
+        opacity: 0.6;
+      }
+
+      50% {
+        transform: translateY(2px) scaleY(1.15);
+        opacity: 1;
+      }
+
+      100% {
+        transform: translateY(-2px) scaleY(0.9);
+        opacity: 0.6;
+      }
+    }
+
+    /* Critical node pulse glow */
+    @keyframes criticalPulse {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 4px rgba(244, 63, 94, 0.4));
+      }
+
+      50% {
+        filter: drop-shadow(0 0 16px rgba(244, 63, 94, 0.95));
+      }
+    }
+
+    /* Multi-layered Gulf Wave Oscillations */
+    @keyframes oceanWaveSlow {
+      0% {
+        transform: translateY(0px) skewX(0deg);
+      }
+
+      50% {
+        transform: translateY(-6px) skewX(1deg);
+      }
+
+      100% {
+        transform: translateY(0px) skewX(0deg);
+      }
+    }
+
+    @keyframes oceanWaveMid {
+      0% {
+        transform: translateY(0px) skewX(-1.5deg);
+      }
+
+      50% {
+        transform: translateY(-8px) skewX(1.5deg);
+      }
+
+      100% {
+        transform: translateY(0px) skewX(-1.5deg);
+      }
+    }
+
+    @keyframes oceanWaveFast {
+      0% {
+        transform: translateY(0px) scaleY(0.95);
+      }
+
+      50% {
+        transform: translateY(-10px) scaleY(1.08);
+      }
+
+      100% {
+        transform: translateY(0px) scaleY(0.95);
+      }
+    }
+
+    /* Shimmering Sea Foam particles */
+    @keyframes foamFloat {
+      0% {
+        opacity: 0.2;
+        transform: translateY(3px) scale(0.85);
+      }
+
+      50% {
+        opacity: 0.9;
+        transform: translateY(-4px) scale(1.15);
+      }
+
+      100% {
+        opacity: 0.2;
+        transform: translateY(3px) scale(0.85);
+      }
+    }
+
+    .animate-river {
+      animation: riverFlowAnim var(--flow-duration, 1.4s) linear infinite;
+    }
+
+    .animate-spillway {
+      animation: spillwaySpray 0.75s ease-in-out infinite;
+    }
+
+    .critical-glow {
+      animation: criticalPulse 1.3s ease-in-out infinite;
+    }
+
+    .wave-layer-slow {
+      animation: oceanWaveSlow 6s ease-in-out infinite;
+    }
+
+    .wave-layer-mid {
+      animation: oceanWaveMid 4.2s ease-in-out infinite;
+    }
+
+    .wave-layer-fast {
+      animation: oceanWaveFast 2.8s ease-in-out infinite;
+    }
+
+    .animate-foam {
+      animation: foamFloat 3.2s ease-in-out infinite;
+    }
+
+    .fade-dim {
+      opacity: 0.15 !important;
+      transition: opacity 0.35s ease;
+    }
+
+    .fade-focus {
+      opacity: 1 !important;
+      transition: opacity 0.35s ease;
+    }
+
+    /* Custom select style for mobile */
+    select {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2338bdf8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+      background-position: right 0.5rem center;
+      background-repeat: no-repeat;
+      background-size: 1.25em 1.25em;
+      padding-right: 2rem;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+
+    /* SVG Canvas drag cursor */
+    .canvas-draggable {
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .canvas-draggable:active {
+      cursor: grabbing;
     }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
 
-  <!-- Header -->
-  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
-    <div>
-      <h1 class="text-xl md:text-2xl font-bold text-sky-400 flex items-center gap-2">
-        <span>🌊</span> ผังจำลองการระบายน้ำระดับประเทศสู่อ่าวไทย
-      </h1>
-      <p class="text-xs text-slate-400 mt-1">
-        เชื่อมต่อฐานข้อมูล Supabase Realtime Pipeline (RID & EGAT Standards)
-      </p>
+<body class="text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-slate-900">
+
+  <!-- Header Section -->
+  <header class="bg-[#081022]/95 border-b border-[#142342] backdrop-blur sticky top-0 z-40">
+    <div
+      class="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+
+      <!-- Top Row: Brand & Status Alert -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div
+            class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 via-cyan-500 to-teal-400 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6 text-slate-950 font-black" fill="none" stroke="currentColor"
+              viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <h1 class="text-base sm:text-lg font-bold tracking-tight text-white font-heading">
+                ผังระบายน้ำและจุดวิกฤต <span class="text-cyan-400">ลุ่มน้ำสู่อ่าวไทย</span>
+              </h1>
+            </div>
+            <p class="text-[11px] sm:text-xs text-slate-400">
+              ติดตามปริมาณน้ำไหลผ่าน (ลบ.ม./วินาที) สู่อ่าวไทย
+            </p>
+          </div>
+        </div>
+
+        <span
+          class="inline-flex items-center px-2 py-1 rounded text-[10px] sm:text-[11px] font-bold bg-rose-950/90 text-rose-400 border border-rose-800 shadow-sm animate-pulse shrink-0">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping mr-1.5"></span>เตือนภัย (LIVE)
+        </span>
+      </div>
+
+      <!-- Controls Row: Flow Speed + Surge Button + Config -->
+      <div
+        class="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0 border-t border-[#142342]/60 sm:border-0">
+        <!-- Flow Speed Simulation Buttons -->
+        <div class="flex items-center bg-[#0d1830] rounded-lg p-0.5 border border-[#1a2d52] text-[11px]">
+          <span class="px-1.5 py-0.5 text-slate-400 font-medium hidden xs:inline">ความเร็ว:</span>
+          <button id="btnSpeed1" onclick="setSpeed(2.4, this)"
+            class="px-2 py-0.5 rounded text-slate-300 hover:text-white">1x</button>
+          <button id="btnSpeed2" onclick="setSpeed(1.4, this)"
+            class="px-2 py-0.5 rounded bg-sky-600 text-white font-bold">2x</button>
+          <button id="btnSpeed3" onclick="setSpeed(0.7, this)"
+            class="px-2 py-0.5 rounded text-slate-300 hover:text-white">3x</button>
+        </div>
+
+        <!-- Simulation Water Surge Button -->
+        <button onclick="toggleSurgeSimulation()" id="surgeBtn"
+          class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-950 hover:bg-rose-900 text-[11px] font-semibold text-rose-200 border border-rose-500/60 transition-all shadow-sm">
+          <svg class="w-3 h-3 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span id="surgeBtnText">⚠ จำลองน้ำหลาก</span>
+        </button>
+
+        <!-- API Config Modal Trigger -->
+        <button onclick="toggleConfigModal()"
+          class="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#0d1830] hover:bg-[#142342] text-[11px] font-medium text-slate-300 border border-[#1a2d52] transition-all">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="hidden md:inline">API</span>
+        </button>
+      </div>
+
     </div>
 
-    <!-- แถบควบคุมการอัปเดต -->
-    <div class="flex items-center gap-3">
-      <button id="btnFetchApi" onclick="fetchLiveThaiWaterData()" 
-              class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-semibold flex items-center gap-2 shadow transition">
-        <span id="apiSpinner" class="hidden animate-spin">⏳</span>
-        <span>🔄 รีเฟรชข้อมูลสด (Supabase)</span>
-      </button>
+    <!-- Filter Sub-bar: Fully Responsive 4-Column Grid on Mobile -->
+    <div class="border-t border-[#142342] bg-[#070e1e]/95 px-3 sm:px-6 py-2">
+      <div
+        class="max-w-[1440px] mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+
+        <!-- Basin Filter Selection: Responsive 4-Column Grid on Mobile, Flex on Desktop -->
+        <div class="w-full md:w-auto">
+          <div
+            class="grid grid-cols-4 md:flex items-center gap-1 md:gap-1.5 bg-[#0b1428] md:bg-transparent p-1 md:p-0 rounded-xl border md:border-0 border-[#172544]">
+
+            <button onclick="selectBasin('all')" id="tab-all"
+              class="basin-tab active px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all bg-sky-600 text-white shadow-sm shadow-sky-600/30 flex items-center justify-center gap-1">
+              <span class="text-xs">🌐</span>
+              <span class="truncate hidden md:inline">แสดงทุกสายน้ำ</span>
+              <span class="truncate md:hidden">ทั้งหมด</span>
+            </button>
+
+            <button onclick="selectBasin('chao_phraya')" id="tab-chao_phraya"
+              class="basin-tab px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all bg-[#0d1830] text-slate-300 hover:bg-[#142342] border border-[#172544] flex items-center justify-center gap-1">
+              <span class="text-xs">🌊</span>
+              <span class="truncate hidden md:inline">ลุ่มน้ำเจ้าพระยา (สายหลัก)</span>
+              <span class="truncate md:hidden">เจ้าพระยา</span>
+            </button>
+
+            <button onclick="selectBasin('mae_klong')" id="tab-mae_klong"
+              class="basin-tab px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all bg-[#0d1830] text-slate-300 hover:bg-[#142342] border border-[#172544] flex items-center justify-center gap-1">
+              <span class="text-xs">⛰️</span>
+              <span class="truncate hidden md:inline">ลุ่มน้ำแม่กลอง (ฝั่งตะวันตก)</span>
+              <span class="truncate md:hidden">แม่กลอง</span>
+            </button>
+
+            <button onclick="selectBasin('bang_pakong')" id="tab-bang_pakong"
+              class="basin-tab px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-center transition-all bg-[#0d1830] text-slate-300 hover:bg-[#142342] border border-[#172544] flex items-center justify-center gap-1">
+              <span class="text-xs">🌴</span>
+              <span class="truncate hidden md:inline">ลุ่มน้ำบางปะกง (ฝั่งตะวันออก)</span>
+              <span class="truncate md:hidden">บางปะกง</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Benchmark Selector: Dropdown on Mobile, Segmented Buttons on Desktop -->
+        <div class="flex items-center gap-2 w-full md:w-auto">
+          <span class="text-slate-400 font-medium text-[11px] sm:text-xs shrink-0">เทียบข้อมูล:</span>
+
+          <!-- Mobile Dropdown Selector (Fits 100% without clipping) -->
+          <div class="relative w-full md:hidden">
+            <select id="mobileYearSelect" onchange="setYearMode(this.value)"
+              class="w-full bg-[#0d1830] text-cyan-400 border border-[#1a2d52] rounded-lg px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-cyan-400 shadow-inner">
+              <option value="current" selected>⚡ ปัจจุบัน (ล่าสุด) • 30 ก.ย.</option>
+              <option value="2565">🌧️ ปี 2565 (น้ำมากรอบ 10 ปี)</option>
+              <option value="2554">💥 ปี 2554 (มหาอุทกภัยเจ้าพระยา)</option>
+              <option value="2539">🌊 ปี 2539 (วิกฤตแม่กลอง 3,600 ลบ.ม./วิ)</option>
+              <option value="2556">⛈️ ปี 2556 (วิกฤตบางปะกง 758 ลบ.ม./วิ)</option>
+              <option value="compare">📊 เปรียบเทียบสถิติทุกยุค</option>
+            </select>
+          </div>
+
+          <!-- Desktop Segmented Button Bar -->
+          <div class="hidden md:inline-flex rounded-lg bg-[#0d1830] p-0.5 border border-[#172544] shrink-0 text-xs">
+            <button onclick="setYearMode('current')" id="btnYearCurrent"
+              class="year-btn px-2.5 py-1 rounded-md font-bold bg-cyan-500 text-slate-950 transition-all shadow">
+              ปัจจุบัน (ล่าสุด)
+            </button>
+            <button onclick="setYearMode('2565')" id="btnYear2565"
+              class="year-btn px-2 py-1 rounded-md font-medium text-slate-300 hover:text-white transition-all">
+              ปี 2565
+            </button>
+            <button onclick="setYearMode('2554')" id="btnYear2554"
+              class="year-btn px-2 py-1 rounded-md font-medium text-slate-300 hover:text-white transition-all">
+              ปี 2554 (มหาอุทกภัย)
+            </button>
+            <button onclick="setYearMode('2539')" id="btnYear2539"
+              class="year-btn px-2 py-1 rounded-md font-medium text-slate-300 hover:text-white transition-all">
+              ปี 2539 (วิกฤตแม่กลอง)
+            </button>
+            <button onclick="setYearMode('2556')" id="btnYear2556"
+              class="year-btn px-2 py-1 rounded-md font-medium text-slate-300 hover:text-white transition-all">
+              ปี 2556 (วิกฤตบางปะกง)
+            </button>
+            <button onclick="setYearMode('compare')" id="btnYearCompare"
+              class="year-btn px-2.5 py-1 rounded-md font-semibold text-amber-300 hover:text-white transition-all">
+              ⚡ เทียบทุกยุค
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   </header>
 
-  <!-- Control & Filter Bar -->
-  <div class="bg-slate-800/60 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
-    <!-- River Basin Filter -->
-    <div class="flex items-center gap-2">
-      <span class="text-sm font-medium text-slate-300">เลือกสายน้ำ:</span>
-      <div class="inline-flex rounded-md shadow-sm bg-slate-700 p-1">
-        <button onclick="setBasin('all')" id="btn-all" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold bg-sky-600 text-white">ทั้งหมด</button>
-        <button onclick="setBasin('chao_phraya')" id="btn-chao_phraya" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">เจ้าพระยา</button>
-        <button onclick="setBasin('mae_klong')" id="btn-mae_klong" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">แม่กลอง (ตะวันตก)</button>
-        <button onclick="setBasin('bang_pakong')" id="btn-bang_pakong" class="basin-btn px-3 py-1 rounded text-xs md:text-sm font-semibold text-slate-300 hover:text-white">บางปะกง (ตะวันออก)</button>
+  <!-- Main Dashboard Container -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto p-2.5 sm:p-5 flex flex-col gap-3.5">
+
+    <!-- Top Key Indicator Cards (Actual Current Hydrological Figures) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+
+      <!-- Card 1: C.2 Nakhon Sawan -->
+      <div
+        class="bg-[#0a1224] border border-[#172544] rounded-xl p-3 sm:p-3.5 flex items-center justify-between shadow-lg hover:border-slate-700 transition-all">
+        <div>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">น้ำไหลผ่าน C.2 (นครสวรรค์)</p>
+          <p id="statC2" class="text-lg sm:text-2xl font-bold font-heading text-amber-400 mt-0.5">
+            1,904 <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>
+          </p>
+        </div>
+        <div id="barC2" class="w-2 sm:w-2.5 h-8 sm:h-10 bg-amber-500 rounded-full shadow-sm shadow-amber-500/50"></div>
       </div>
+
+      <!-- Card 2: Chao Phraya Dam (Chai Nat) -->
+      <div
+        class="bg-[#0a1224] border border-rose-900/60 rounded-xl p-3 sm:p-3.5 flex items-center justify-between shadow-lg hover:border-rose-700 transition-all">
+        <div>
+          <p class="text-[11px] sm:text-xs text-rose-300 font-medium">ระบายเขื่อนเจ้าพระยา (ชัยนาท)</p>
+          <p id="statCYP" class="text-lg sm:text-2xl font-bold font-heading text-rose-400 mt-0.5">
+            2,200 <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>
+          </p>
+        </div>
+        <div id="barCYP"
+          class="w-2 sm:w-2.5 h-8 sm:h-10 bg-rose-500 rounded-full shadow-sm shadow-rose-500/50 animate-pulse"></div>
+      </div>
+
+      <!-- Card 3: C.29A Bang Sai -->
+      <div
+        class="bg-[#0a1224] border border-[#172544] rounded-xl p-3 sm:p-3.5 flex items-center justify-between shadow-lg hover:border-slate-700 transition-all">
+        <div>
+          <p class="text-[11px] sm:text-xs text-slate-400 font-medium">น้ำไหลผ่าน C.29A (บางไทร)</p>
+          <p id="statC29A" class="text-lg sm:text-2xl font-bold font-heading text-amber-300 mt-0.5">
+            2,250 <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>
+          </p>
+        </div>
+        <div id="barC29A" class="w-2 sm:w-2.5 h-8 sm:h-10 bg-amber-500 rounded-full shadow-sm shadow-amber-500/50">
+        </div>
+      </div>
+
+      <!-- Card 4: Total Outflow to Gulf -->
+      <div
+        class="bg-[#0a1224] border border-cyan-900/50 rounded-xl p-3 sm:p-3.5 flex items-center justify-between shadow-lg hover:border-cyan-700 transition-all">
+        <div>
+          <p class="text-[11px] sm:text-xs text-cyan-300 font-medium">ปริมาณน้ำรวมสู่อ่าวไทย</p>
+          <p id="statGulfTotal" class="text-lg sm:text-2xl font-bold font-heading text-cyan-400 mt-0.5">
+            5,580 <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>
+          </p>
+        </div>
+        <div id="barGulf"
+          class="w-2 sm:w-2.5 h-8 sm:h-10 bg-cyan-400 rounded-full shadow-sm shadow-cyan-400/50 animate-pulse"></div>
+      </div>
+
     </div>
 
-    <!-- Status Bar -->
-    <div class="text-xs text-slate-400 flex items-center gap-4">
-      <span>สถานะ: <b id="dataSourceTag" class="text-amber-400">กำลังเชื่อมต่อฐานข้อมูล...</b></span>
-      <span>อัปเดตล่าสุด: <span id="lastUpdated" class="text-slate-300">-</span></span>
+    <!-- Interactive Hydrological Canvas Section (Unified SVG for BOTH Mobile & Desktop) -->
+    <div class="relative bg-[#070d1a] rounded-2xl border border-[#172544] shadow-2xl overflow-hidden flex flex-col">
+
+      <!-- Canvas Header Bar with Legend -->
+      <div
+        class="p-2.5 sm:px-5 sm:py-3 border-b border-[#142342] flex flex-wrap items-center justify-between gap-2 bg-[#081022]/90">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+          <h2 class="text-xs sm:text-sm font-bold text-slate-200 font-heading tracking-wide">
+            ผังโครงข่ายการไหลระบายน้ำจำลอง (Interactive Schematic Flow Graph)
+          </h2>
+          <span id="canvasSubTitle" class="text-[11px] text-rose-300 hidden sm:inline">• เขื่อนแม่กลองระบาย 3,000
+            ลบ.ม./วิ ขั้นวิกฤตสีแดง</span>
+        </div>
+
+        <!-- Legend Items -->
+        <div class="flex items-center gap-2.5 text-[11px] sm:text-xs">
+          <div class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="text-slate-300">ปกติ</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span class="text-slate-300">เฝ้าระวัง</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+            <span class="text-rose-300 font-bold">วิกฤต</span>
+          </div>
+          <div
+            class="flex items-center gap-1 text-cyan-400 border-l border-slate-700/80 pl-2 font-medium hidden xs:flex">
+            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>น้ำไหล</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CANVAS WRAPPER: Handles Touch Drag and Pinch Zoom -->
+      <div id="canvasViewport"
+        class="relative w-full h-[540px] sm:h-[640px] md:h-[740px] bg-[#050b17] overflow-hidden canvas-draggable select-none">
+
+        <!-- Floating Interactive Zoom Controls (Always visible on mobile & desktop) -->
+        <div
+          class="absolute top-3 right-3 z-30 flex flex-col gap-1.5 bg-[#081022]/90 backdrop-blur-md p-1.5 rounded-xl border border-[#172544] shadow-xl">
+          <button onclick="zoomCanvas(1.25)" title="ซูมเข้า"
+            class="w-8 h-8 rounded-lg bg-[#0d1830] hover:bg-cyan-600 text-white font-bold flex items-center justify-center border border-[#1a2d52] active:scale-95 transition-all text-sm">
+            ➕
+          </button>
+          <button onclick="zoomCanvas(0.8)" title="ซูมออก"
+            class="w-8 h-8 rounded-lg bg-[#0d1830] hover:bg-cyan-600 text-white font-bold flex items-center justify-center border border-[#1a2d52] active:scale-95 transition-all text-sm">
+            ➖
+          </button>
+          <button onclick="resetCanvasView()" title="มุมมองปกติเต็มผัง"
+            class="w-8 h-8 rounded-lg bg-[#0d1830] hover:bg-cyan-600 text-cyan-400 hover:text-white font-bold flex items-center justify-center border border-[#1a2d52] active:scale-95 transition-all text-xs">
+            ⟲
+          </button>
+        </div>
+
+        <!-- Floating Quick Gesture Hint Badge -->
+        <div
+          class="absolute bottom-3 left-3 z-30 pointer-events-none bg-[#081022]/85 backdrop-blur px-2.5 py-1 rounded-lg border border-[#172544] text-[10px] sm:text-xs text-slate-300 flex items-center gap-1.5">
+          <span>👆</span>
+          <span>ลากเพื่อเลื่อนผัง • กดเลือกสายน้ำด้านบนเพื่อโฟกัสอัตโนมัติ</span>
+        </div>
+
+        <!-- UNIFIED VECTOR SCHEMATIC SVG (Pure Native SVG Elements, NO foreignObject) -->
+        <svg id="schematicSvg" viewBox="0 0 1000 820" class="w-full h-full block" xmlns="http://www.w3.org/2000/svg">
+
+          <defs>
+            <!-- Ocean Deep Gradients -->
+            <linearGradient id="oceanDeepGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0369a1" stop-opacity="0.85" />
+              <stop offset="40%" stop-color="#024976" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#021c38" stop-opacity="1.0" />
+            </linearGradient>
+
+            <linearGradient id="waveSurfaceGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#00e5ff" stop-opacity="0.3" />
+              <stop offset="25%" stop-color="#38bdf8" stop-opacity="0.85" />
+              <stop offset="50%" stop-color="#00e5ff" stop-opacity="0.95" />
+              <stop offset="75%" stop-color="#38bdf8" stop-opacity="0.8" />
+              <stop offset="100%" stop-color="#00e5ff" stop-opacity="0.3" />
+            </linearGradient>
+
+            <linearGradient id="gulfShimmerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.45" />
+              <stop offset="60%" stop-color="#0284c7" stop-opacity="0.15" />
+              <stop offset="100%" stop-color="#0369a1" stop-opacity="0" />
+            </linearGradient>
+
+            <!-- Glow Filters for Native Elements -->
+            <filter id="glowCyan" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            <filter id="glowRed" x="-25%" y="-25%" width="150%" height="150%">
+              <feGaussianBlur stdDeviation="4.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+
+            <filter id="oceanGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="6" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Top Regional Titles -->
+          <g id="basin-titles" class="font-heading tracking-wide">
+            <text x="170" y="32" fill="#f87171" font-size="13" font-weight="700" text-anchor="middle">ลุ่มน้ำแม่กลอง
+              (กาญจนบุรี / ตะวันตก - วิกฤต)</text>
+            <text x="500" y="32" fill="#38bdf8" font-size="14" font-weight="700" text-anchor="middle">ลุ่มน้ำเจ้าพระยา
+              (ปิง วัง ยม น่าน / กลางน้ำ)</text>
+            <text x="830" y="32" fill="#a5b4fc" font-size="13" font-weight="700" text-anchor="middle">ลุ่มน้ำบางปะกง
+              (ปราจีนบุรี / ตะวันออก)</text>
+          </g>
+
+          <!-- 1. MAE KLONG BASIN (WEST - CRITICAL 3,000 M3/S SURGE) -->
+          <g id="group-mae_klong" class="basin-group transition-all duration-300">
+            <!-- Srinagarind Branch -->
+            <path d="M 105 110 C 115 170, 150 200, 170 250" fill="none" stroke="#134e4a" stroke-width="12"
+              stroke-linecap="round" />
+            <path id="stream-srinagarind" d="M 105 110 C 115 170, 150 200, 170 250" fill="none" stroke="#2dd4bf"
+              stroke-width="4.5" stroke-dasharray="8 6" class="animate-river" filter="url(#glowCyan)" />
+
+            <!-- Vajiralongkorn Branch -->
+            <path d="M 235 110 C 225 170, 190 200, 170 250" fill="none" stroke="#134e4a" stroke-width="10"
+              stroke-linecap="round" />
+            <path id="stream-vajira" d="M 235 110 C 225 170, 190 200, 170 250" fill="none" stroke="#2dd4bf"
+              stroke-width="4" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Mae Klong Dam to Ratchaburi (SEVERE SURGE RED 3,000 M3/S) -->
+            <path d="M 170 280 C 170 380, 150 510, 170 600" fill="none" stroke="#881337" stroke-width="22"
+              stroke-linecap="round" />
+            <path id="stream-maeklong-main" d="M 170 280 C 170 380, 150 510, 170 600" fill="none" stroke="#f43f5e"
+              stroke-width="9" stroke-dasharray="12 8" class="animate-river" filter="url(#glowRed)"
+              style="animation-duration: 0.75s;" />
+
+            <!-- Outflow to Gulf (Samut Songkhram) -->
+            <path d="M 170 625 C 180 670, 200 705, 220 735" fill="none" stroke="#be123c" stroke-width="18"
+              stroke-linecap="round" />
+            <path id="stream-maeklong-outlet" d="M 170 625 C 180 670, 200 705, 220 735" fill="none" stroke="#fb7185"
+              stroke-width="7" stroke-dasharray="12 8" class="animate-river" style="animation-duration: 0.8s;" />
+          </g>
+
+          <!-- 2. CHAO PHRAYA BASIN (CENTRAL) -->
+          <g id="group-chao_phraya" class="basin-group transition-all duration-300">
+            <!-- Ping Wang Yom Nan top branches to C.2 -->
+            <path d="M 430 55 C 450 75, 475 90, 495 105" fill="none" stroke="#075985" stroke-width="8"
+              stroke-linecap="round" />
+            <path d="M 430 55 C 450 75, 475 90, 495 105" fill="none" stroke="#38bdf8" stroke-width="3.5"
+              stroke-dasharray="8 6" class="animate-river" />
+
+            <path d="M 570 55 C 550 75, 525 90, 505 105" fill="none" stroke="#075985" stroke-width="8"
+              stroke-linecap="round" />
+            <path d="M 570 55 C 550 75, 525 90, 505 105" fill="none" stroke="#38bdf8" stroke-width="3.5"
+              stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- C.2 to Chao Phraya Dam (Chai Nat) -->
+            <path d="M 500 135 L 500 240" fill="none" stroke="#075985" stroke-width="20" stroke-linecap="round" />
+            <path id="stream-c2-cyp" d="M 500 135 L 500 240" fill="none" stroke="#fbbf24" stroke-width="8"
+              stroke-dasharray="12 8" class="animate-river" filter="url(#glowCyan)" />
+
+            <!-- Suphan Buri / Tha Chin Diversion -->
+            <path d="M 480 265 C 400 295, 365 430, 385 600" fill="none" stroke="#083344" stroke-width="12"
+              stroke-linecap="round" />
+            <path id="stream-thachin" d="M 480 265 C 400 295, 365 430, 385 600" fill="none" stroke="#06b6d4"
+              stroke-width="5" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Tha Chin Outflow to Gulf -->
+            <path d="M 385 620 C 390 660, 405 695, 420 735" fill="none" stroke="#0891b2" stroke-width="10"
+              stroke-linecap="round" />
+            <path d="M 385 620 C 390 660, 405 695, 420 735" fill="none" stroke="#67e8f9" stroke-width="4"
+              stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Chao Phraya Dam to C.29A Bang Sai (Red critical discharge flow) -->
+            <path d="M 500 280 C 500 365, 510 440, 510 505" fill="none" stroke="#991b1b" stroke-width="22"
+              stroke-linecap="round" />
+            <path id="stream-cyp-c29a" d="M 500 280 C 500 365, 510 440, 510 505" fill="none" stroke="#f43f5e"
+              stroke-width="9" stroke-dasharray="14 10" class="animate-river" filter="url(#glowRed)"
+              style="animation-duration: 1.1s;" />
+
+            <!-- Pa Sak Jolasid -> Rama VI Dam -->
+            <path d="M 640 305 C 640 355, 630 385, 625 410" fill="none" stroke="#0c4a6e" stroke-width="10"
+              stroke-linecap="round" />
+            <path id="stream-pasak-rama6" d="M 640 305 C 640 355, 630 385, 625 410" fill="none" stroke="#0ea5e9"
+              stroke-width="4" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Rama VI merging to Chao Phraya at Ayutthaya -->
+            <path d="M 620 435 C 590 470, 545 495, 515 510" fill="none" stroke="#0c4a6e" stroke-width="11"
+              stroke-linecap="round" />
+            <path id="stream-rama6-confluence" d="M 620 435 C 590 470, 545 495, 515 510" fill="none" stroke="#38bdf8"
+              stroke-width="4.5" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- C.29A Bang Sai through Bangkok to Sea -->
+            <path d="M 510 535 C 510 600, 520 640, 520 665" fill="none" stroke="#0369a1" stroke-width="24"
+              stroke-linecap="round" />
+            <path id="stream-c29a-bkk" d="M 510 535 C 510 600, 520 640, 520 665" fill="none" stroke="#38bdf8"
+              stroke-width="9.5" stroke-dasharray="16 10" class="animate-river" filter="url(#glowCyan)" />
+
+            <!-- Bangkok Outflow into Gulf -->
+            <path d="M 520 685 C 520 710, 515 725, 510 735" fill="none" stroke="#1d4ed8" stroke-width="26"
+              stroke-linecap="round" />
+            <path id="stream-bkk-sea" d="M 520 685 C 520 710, 515 725, 510 735" fill="none" stroke="#93c5fd"
+              stroke-width="12" stroke-dasharray="16 12" class="animate-river" />
+          </g>
+
+          <!-- 3. BANG PAKONG BASIN (EAST) -->
+          <g id="group-bang_pakong" class="basin-group transition-all duration-300">
+            <!-- Khun Dan Dam -->
+            <path d="M 750 135 C 750 190, 790 220, 805 260" fill="none" stroke="#312e81" stroke-width="10"
+              stroke-linecap="round" />
+            <path id="stream-khundan" d="M 750 135 C 750 190, 790 220, 805 260" fill="none" stroke="#818cf8"
+              stroke-width="4" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Naruebodinda Dam -->
+            <path d="M 890 135 C 880 190, 830 220, 810 260" fill="none" stroke="#312e81" stroke-width="10"
+              stroke-linecap="round" />
+            <path id="stream-naruebodinda" d="M 890 135 C 880 190, 830 220, 810 260" fill="none" stroke="#818cf8"
+              stroke-width="4" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Confluence to Bang Pakong Barrage / KGT.3 -->
+            <path d="M 810 270 C 800 360, 810 440, 790 515" fill="none" stroke="#3730a3" stroke-width="16"
+              stroke-linecap="round" />
+            <path id="stream-bangpakong-main" d="M 810 270 C 800 360, 810 440, 790 515" fill="none" stroke="#a5b4fc"
+              stroke-width="6.5" stroke-dasharray="10 8" class="animate-river" filter="url(#glowCyan)" />
+
+            <!-- Khlong Si Yat Dam branch -->
+            <path d="M 890 415 C 850 445, 820 480, 800 515" fill="none" stroke="#312e81" stroke-width="8"
+              stroke-linecap="round" />
+            <path id="stream-khlong-siyat" d="M 890 415 C 850 445, 820 480, 800 515" fill="none" stroke="#818cf8"
+              stroke-width="3.5" stroke-dasharray="8 6" class="animate-river" />
+
+            <!-- Bang Pakong Outflow into Gulf -->
+            <path d="M 790 535 C 780 605, 755 675, 730 735" fill="none" stroke="#4338ca" stroke-width="16"
+              stroke-linecap="round" />
+            <path id="stream-bangpakong-outlet" d="M 790 535 C 780 605, 755 675, 730 735" fill="none" stroke="#c7d2fe"
+              stroke-width="6.5" stroke-dasharray="12 8" class="animate-river" />
+          </g>
+
+          <!-- ================= GULF OF THAILAND WITH DYNAMIC WAVE ANIMATION ================= -->
+          <g id="gulf-area">
+
+            <!-- Layer 0: Background Deep Water Fill with Gradient -->
+            <path d="M 0 710 Q 250 685, 500 690 T 1000 710 L 1000 820 L 0 820 Z" fill="url(#oceanDeepGrad)" />
+
+            <!-- Layer 1: Slow Deep Swell (Bottom Wave Layer) -->
+            <g class="wave-layer-slow">
+              <path d="M -50 725 C 150 705, 350 740, 500 720 C 680 700, 850 735, 1050 720 L 1050 820 L -50 820 Z"
+                fill="#0284c7" opacity="0.32" />
+            </g>
+
+            <!-- Layer 2: Mid-Level Wave Swell (Opposite Drift) -->
+            <g class="wave-layer-mid">
+              <path d="M -50 735 C 100 748, 280 712, 480 732 C 680 752, 880 718, 1050 736 L 1050 820 L -50 820 Z"
+                fill="#0369a1" opacity="0.45" />
+            </g>
+
+            <!-- Layer 3: Surface Wave Crest with Neon Cyan Shimmer -->
+            <g class="wave-layer-fast">
+              <!-- Wave Crest Line -->
+              <path d="M -30 718 Q 120 700, 260 714 T 540 712 T 800 710 T 1030 716" fill="none"
+                stroke="url(#waveSurfaceGrad)" stroke-width="3" filter="url(#glowCyan)" />
+              <path d="M -30 728 Q 140 715, 290 726 T 600 722 T 870 725 T 1030 728" fill="none" stroke="#38bdf8"
+                stroke-width="1.5" stroke-dasharray="16 10" opacity="0.75" />
+            </g>
+
+            <!-- Sea Foam Bubbles and Sparkles -->
+            <g class="animate-foam pointer-events-none" opacity="0.8">
+              <circle cx="160" cy="745" r="2.5" fill="#e0f2fe" />
+              <circle cx="280" cy="735" r="2" fill="#38bdf8" />
+              <circle cx="340" cy="755" r="1.5" fill="#bae6fd" />
+              <circle cx="460" cy="740" r="2.5" fill="#e0f2fe" />
+              <circle cx="580" cy="735" r="2" fill="#7dd3fc" />
+              <circle cx="670" cy="750" r="1.8" fill="#e0f2fe" />
+              <circle cx="820" cy="742" r="2.2" fill="#bae6fd" />
+              <circle cx="910" cy="736" r="1.5" fill="#e0f2fe" />
+            </g>
+
+            <!-- ================= RIVER MOUTH DISPERSION RIPPLES (SHOCKWAVES) ================= -->
+
+            <!-- Mouth 1: Mae Klong River Mouth (x: 220, y: 735) - SEVERE SURGE (RED 3,000 M3/S) -->
+            <g id="ripple-maeklong" transform="translate(220, 735)">
+              <!-- Outer Shockwave Ring 1 -->
+              <circle cx="0" cy="0" r="8" fill="none" stroke="#f43f5e" stroke-width="2.5" opacity="0.9">
+                <animate attributeName="r" from="6" to="44" dur="1.2s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.95" to="0" dur="1.2s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" from="3" to="0.5" dur="1.2s" repeatCount="indefinite" />
+              </circle>
+              <!-- Outer Shockwave Ring 2 -->
+              <circle cx="0" cy="0" r="8" fill="none" stroke="#fb7185" stroke-width="2" opacity="0.8">
+                <animate attributeName="r" from="6" to="34" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.85" to="0" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
+              </circle>
+              <!-- Core Point -->
+              <circle cx="0" cy="0" r="4.5" fill="#f43f5e" filter="url(#glowRed)" />
+            </g>
+
+            <!-- Mouth 2: Tha Chin River Mouth (x: 420, y: 735) -->
+            <g id="ripple-thachin" transform="translate(420, 735)">
+              <circle cx="0" cy="0" r="5" fill="none" stroke="#06b6d4" stroke-width="1.8" opacity="0.8">
+                <animate attributeName="r" from="4" to="24" dur="1.8s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.8" to="0" dur="1.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="0" cy="0" r="3" fill="#22d3ee" />
+            </g>
+
+            <!-- Mouth 3: Chao Phraya / BKK River Mouth (x: 510, y: 735) - HEAVY INFLOW -->
+            <g id="ripple-chaophraya" transform="translate(510, 735)">
+              <circle cx="0" cy="0" r="8" fill="none" stroke="#38bdf8" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" from="5" to="36" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.9" to="0" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" from="3" to="0.8" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="0" cy="0" r="8" fill="none" stroke="#00e5ff" stroke-width="1.8" opacity="0.7">
+                <animate attributeName="r" from="5" to="26" dur="1.5s" begin="0.5s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" begin="0.5s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="0" cy="0" r="4.5" fill="#38bdf8" filter="url(#glowCyan)" />
+            </g>
+
+            <!-- Mouth 4: Bang Pakong River Mouth (x: 730, y: 735) -->
+            <g id="ripple-bangpakong" transform="translate(730, 735)">
+              <circle cx="0" cy="0" r="5" fill="none" stroke="#818cf8" stroke-width="1.8" opacity="0.8">
+                <animate attributeName="r" from="4" to="24" dur="2.1s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="0.8" to="0" dur="2.1s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="0" cy="0" r="3.5" fill="#a5b4fc" />
+            </g>
+
+            <!-- Gulf Centered Pill Badge with Live Pulsing Light -->
+            <g id="gulf-pill-badge" transform="translate(500, 782)" class="cursor-pointer" onclick="openGulfModal()">
+              <!-- Outer Glow Filter Box -->
+              <rect x="-185" y="-19" width="370" height="38" rx="19" fill="#08142b" stroke="#00e5ff" stroke-width="2"
+                filter="url(#glowCyan)" />
+
+              <!-- Left Water Wave Icon -->
+              <text x="-162" y="6" font-size="16" text-anchor="middle">🌊</text>
+
+              <!-- Center Gulf Text Info -->
+              <text x="0" y="5" fill="#38bdf8" font-size="13" font-weight="700" text-anchor="middle"
+                font-family="Prompt">
+                อ่าวไทย (Gulf of Thailand) • <tspan id="gulfBadgeVal" fill="#00e5ff" font-weight="800">5,580</tspan>
+                ลบ.ม./วิ
+              </text>
+
+              <!-- Click Hint Text or Chevron -->
+              <circle cx="158" cy="0" r="4" fill="#00e5ff" class="animate-ping" />
+              <circle cx="158" cy="0" r="3" fill="#00e5ff" />
+            </g>
+          </g>
+
+          <!-- ================= 15 NATIVE SVG NODES (NO foreignObject) ================= -->
+
+          <!-- 1. C.2 NAKHON SAWAN -->
+          <g id="node-c2" class="cursor-pointer" onclick="openNodeModal('c2')">
+            <rect x="410" y="95" width="180" height="42" rx="8" fill="#0a1224" stroke="#f59e0b" stroke-width="1.8"
+              filter="url(#glowCyan)" />
+            <circle cx="426" cy="116" r="6" fill="#f59e0b" id="dot-c2" class="animate-pulse" />
+            <text x="440" y="112" fill="#f1f5f9" font-size="11" font-weight="600" font-family="Prompt">C.2
+              นครสวรรค์</text>
+            <text x="440" y="128" fill="#fbbf24" font-size="12" font-weight="700" id="val-c2">1,904 ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 2. CHAO PHRAYA DAM (CHAI NAT - CRITICAL 2,200) -->
+          <g id="node-cyp_dam" class="cursor-pointer" onclick="openNodeModal('cyp_dam')">
+            <rect x="385" y="225" width="230" height="56" rx="10" fill="#18040a" stroke="#f43f5e" stroke-width="2.5"
+              class="critical-glow" />
+            <g transform="translate(396, 235)" class="animate-spillway">
+              <path d="M 0 0 L 0 35 M 6 3 L 6 38 M 12 0 L 12 35" stroke="#f43f5e" stroke-width="3"
+                stroke-linecap="round" />
+            </g>
+            <circle cx="424" cy="245" r="6" fill="#f43f5e" id="dot-cyp_dam" class="animate-ping" />
+            <text x="438" y="243" fill="#fff" font-size="11.5" font-weight="700" font-family="Prompt">เขื่อนเจ้าพระยา
+              (ชัยนาท)</text>
+            <text x="438" y="259" fill="#f43f5e" font-size="13" font-weight="800" id="val-cyp_dam">2,200 ลบ.ม./วิ</text>
+            <text x="438" y="274" fill="#fda4af" font-size="9.5">⚠️ ระบายวิกฤต • ล้นตลิ่งท้ายเขื่อน</text>
+          </g>
+
+          <!-- 3. SUPHAN BURI / THA CHIN -->
+          <g id="node-tha_chin" class="cursor-pointer" onclick="openNodeModal('tha_chin')">
+            <rect x="300" y="415" width="160" height="40" rx="8" fill="#0a1224" stroke="#06b6d4" stroke-width="1.5" />
+            <circle cx="316" cy="435" r="5" fill="#10b981" id="dot-tha_chin" />
+            <text x="328" y="431" fill="#f1f5f9" font-size="10.5" font-weight="600" font-family="Prompt">ผันน้ำท่าจีน
+              (สุพรรณฯ)</text>
+            <text x="328" y="447" fill="#22d3ee" font-size="11.5" font-weight="700" id="val-tha_chin">310
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 4. PA SAK JOLASID DAM -->
+          <g id="node-pasak_dam" class="cursor-pointer" onclick="openNodeModal('pasak_dam')">
+            <rect x="570" y="265" width="170" height="46" rx="8" fill="#0a1224" stroke="#38bdf8" stroke-width="1.5" />
+            <circle cx="586" cy="283" r="5" fill="#10b981" id="dot-pasak_dam" />
+            <text x="598" y="282" fill="#f1f5f9" font-size="11" font-weight="600"
+              font-family="Prompt">เขื่อนป่าสักชลสิทธิ์</text>
+            <text x="598" y="298" fill="#38bdf8" font-size="11.5" font-weight="700" id="val-pasak_dam">ระบาย 115
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 5. RAMA VI DAM -->
+          <g id="node-rama6_dam" class="cursor-pointer" onclick="openNodeModal('rama6_dam')">
+            <rect x="565" y="395" width="165" height="42" rx="8" fill="#0a1224" stroke="#38bdf8" stroke-width="1.5" />
+            <circle cx="581" cy="416" r="5" fill="#10b981" id="dot-rama6_dam" />
+            <text x="593" y="412" fill="#f1f5f9" font-size="11" font-weight="600"
+              font-family="Prompt">เขื่อนพระรามหก</text>
+            <text x="593" y="428" fill="#38bdf8" font-size="11.5" font-weight="700" id="val-rama6_dam">410
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 6. C.29A BANG SAI (AYUTTHAYA) -->
+          <g id="node-c29a" class="cursor-pointer" onclick="openNodeModal('c29a')">
+            <rect x="425" y="495" width="180" height="46" rx="8" fill="#070e1c" stroke="#f59e0b" stroke-width="2" />
+            <circle cx="441" cy="518" r="6" fill="#f59e0b" id="dot-c29a" />
+            <text x="454" y="514" fill="#f8fafc" font-size="11" font-weight="700" font-family="Prompt">C.29A บางไทร
+              (อยุธยา)</text>
+            <text x="454" y="530" fill="#fbbf24" font-size="12" font-weight="800" id="val-c29a">2,250 ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 7. BANGKOK / SAMUT PRAKAN -->
+          <g id="node-bkk" class="cursor-pointer" onclick="openNodeModal('bkk')">
+            <rect x="425" y="645" width="185" height="42" rx="8" fill="#0a1224" stroke="#60a5fa" stroke-width="1.5" />
+            <circle cx="441" cy="666" r="5" fill="#f59e0b" id="dot-bkk" />
+            <text x="454" y="662" fill="#f1f5f9" font-size="11" font-weight="600" font-family="Prompt">กทม. /
+              สมุทรปราการ</text>
+            <text x="454" y="678" fill="#93c5fd" font-size="11.5" font-weight="700" id="val-bkk">1,950 ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 8. SRINAGARIND DAM (WEST) -->
+          <g id="node-srinagarind" class="cursor-pointer" onclick="openNodeModal('srinagarind')">
+            <rect x="35" y="85" width="155" height="42" rx="8" fill="#0a1224" stroke="#2dd4bf" stroke-width="1.5" />
+            <circle cx="50" cy="106" r="5" fill="#10b981" id="dot-srinagarind" />
+            <text x="62" y="102" fill="#f1f5f9" font-size="10.5" font-weight="600"
+              font-family="Prompt">เขื่อนศรีนครินทร์</text>
+            <text x="62" y="118" fill="#2dd4bf" font-size="11.5" font-weight="700" id="val-srinagarind">ระบาย 180
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 9. VAJIRALONGKORN DAM (WEST) -->
+          <g id="node-vajiralongkorn" class="cursor-pointer" onclick="openNodeModal('vajiralongkorn')">
+            <rect x="200" y="85" width="155" height="42" rx="8" fill="#0a1224" stroke="#2dd4bf" stroke-width="1.5" />
+            <circle cx="215" cy="106" r="5" fill="#10b981" id="dot-vajiralongkorn" />
+            <text x="227" y="102" fill="#f1f5f9" font-size="10.5" font-weight="600"
+              font-family="Prompt">เขื่อนวชิราลงกรณ</text>
+            <text x="227" y="118" fill="#2dd4bf" font-size="11.5" font-weight="700" id="val-vajiralongkorn">ระบาย 120
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 10. MAE KLONG DAM (WEST - CRITICAL 3,000 M3/S) -->
+          <g id="node-maeklong_dam" class="cursor-pointer" onclick="openNodeModal('maeklong_dam')">
+            <rect x="85" y="255" width="175" height="48" rx="8" fill="#1f0308" stroke="#f43f5e" stroke-width="2.5"
+              class="critical-glow" />
+            <circle cx="101" cy="279" r="6" fill="#f43f5e" id="dot-maeklong_dam" class="animate-ping" />
+            <text x="114" y="274" fill="#fff" font-size="11" font-weight="700" font-family="Prompt">เขื่อนแม่กลอง
+              (กาญฯ)</text>
+            <text x="114" y="291" fill="#f43f5e" font-size="12.5" font-weight="800" id="val-maeklong_dam">ระบาย 3,000
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 11. RATCHABURI / SAMUT SONGKHRAM -->
+          <g id="node-ratchaburi" class="cursor-pointer" onclick="openNodeModal('ratchaburi')">
+            <rect x="90" y="585" width="165" height="42" rx="8" fill="#18040a" stroke="#f43f5e" stroke-width="1.8" />
+            <circle cx="105" cy="606" r="5" fill="#f43f5e" id="dot-ratchaburi" class="animate-pulse" />
+            <text x="118" y="602" fill="#fff" font-size="10.5" font-weight="600" font-family="Prompt">ราชบุรี /
+              ส.สงคราม</text>
+            <text x="118" y="618" fill="#f43f5e" font-size="11.5" font-weight="700" id="val-ratchaburi">2,850
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 12. KHUN DAN DAM (EAST) -->
+          <g id="node-khundan" class="cursor-pointer" onclick="openNodeModal('khundan')">
+            <rect x="670" y="110" width="155" height="42" rx="8" fill="#0a1224" stroke="#818cf8" stroke-width="1.5" />
+            <circle cx="685" cy="131" r="5" fill="#10b981" id="dot-khundan" />
+            <text x="697" y="127" fill="#f1f5f9" font-size="10.5" font-weight="600"
+              font-family="Prompt">เขื่อนขุนด่านปราการชล</text>
+            <text x="697" y="143" fill="#a5b4fc" font-size="11.5" font-weight="700" id="val-khundan">ระบาย 50
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 13. NARUEBODINDA DAM (EAST) -->
+          <g id="node-naruebodinda" class="cursor-pointer" onclick="openNodeModal('naruebodinda')">
+            <rect x="835" y="110" width="155" height="42" rx="8" fill="#0a1224" stroke="#818cf8" stroke-width="1.5" />
+            <circle cx="850" cy="131" r="5" fill="#10b981" id="dot-naruebodinda" />
+            <text x="862" y="127" fill="#f1f5f9" font-size="10.5" font-weight="600"
+              font-family="Prompt">เขื่อนนฤบดินทรจินดา</text>
+            <text x="862" y="143" fill="#a5b4fc" font-size="11.5" font-weight="700" id="val-naruebodinda">ระบาย 40
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 14. KHLONG SI YAT DAM (EAST) -->
+          <g id="node-khlong_si_yat" class="cursor-pointer" onclick="openNodeModal('khlong_si_yat')">
+            <rect x="840" y="380" width="145" height="40" rx="8" fill="#0a1224" stroke="#818cf8" stroke-width="1.5" />
+            <circle cx="854" cy="400" r="5" fill="#10b981" id="dot-khlong_si_yat" />
+            <text x="866" y="396" fill="#f1f5f9" font-size="10.5" font-weight="600"
+              font-family="Prompt">เขื่อนคลองสียัด</text>
+            <text x="866" y="411" fill="#a5b4fc" font-size="11.5" font-weight="700" id="val-khlong_si_yat">ระบาย 15
+              ลบ.ม./วิ</text>
+          </g>
+
+          <!-- 15. BANG PAKONG BARRAGE / KGT.3 -->
+          <g id="node-bangpakong_gate" class="cursor-pointer" onclick="openNodeModal('bangpakong_gate')">
+            <rect x="710" y="500" width="175" height="46" rx="8" fill="#070e1c" stroke="#818cf8" stroke-width="2" />
+            <circle cx="726" cy="523" r="5.5" fill="#10b981" id="dot-bangpakong_gate" />
+            <text x="739" y="519" fill="#f8fafc" font-size="11" font-weight="700" font-family="Prompt">ปตร.
+              แม่น้ำบางปะกง</text>
+            <text x="739" y="535" fill="#a5b4fc" font-size="11.5" font-weight="800" id="val-bangpakong_gate">ไหลผ่าน 310
+              ลบ.ม./วิ</text>
+          </g>
+
+        </svg>
+
+      </div>
+
+      <!-- Canvas Footer Note -->
+      <div
+        class="px-3 py-2 bg-[#081022] border-t border-[#142342] flex flex-wrap items-center justify-between text-[11px] text-slate-400">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>ความเร็วคลื่นและสายน้ำจะปรับอัตโนมัติตามอัตราไหลจริง (m³/s)</span>
+        </div>
+        <span class="text-rose-400 font-semibold">อัปเดตข้อมูลสด: 30 ก.ย. 2569</span>
+      </div>
+
+    </div>
+
+    <!-- Comparative Analysis Cards (Historical Flow Peak Comparison) -->
+    <section class="space-y-3 mt-1">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+        <div>
+          <h2 class="text-sm sm:text-base font-bold text-white font-heading">
+            เปรียบเทียบจุดพีคระดับน้ำสายหลัก (Historical Flow Peak Comparison)
+          </h2>
+          <p class="text-[11px] sm:text-xs text-slate-400">
+            เปรียบเทียบอัตราการไหลผ่านระหว่างปีมหาอุทกภัย 2554, 2565, 2539 (แม่กลอง), 2556 (บางปะกง)
+            และสถานะปัจจุบันจริง
+          </p>
+        </div>
+        <span
+          class="text-[10px] sm:text-xs bg-[#0d1830] text-slate-300 px-2.5 py-1 rounded-full border border-[#172544] self-start sm:self-auto">
+          หน่วย: ลบ.ม./วินาที
+        </span>
+      </div>
+
+      <!-- Comparative Grid of Key Benchmark Nodes -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+
+        <!-- Card 1: C.2 Nakhon Sawan -->
+        <div
+          class="bg-[#0a1224] border border-[#172544] rounded-xl p-3 shadow-lg hover:border-slate-600 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-1.5 border-b border-[#142342]">
+              <span class="text-[10px] font-semibold text-slate-400">สถานีต้นน้ำสายหลัก</span>
+              <span
+                class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-amber-950 text-amber-400 border border-amber-800">เฝ้าระวัง</span>
+            </div>
+            <h3 class="text-sm font-bold text-white font-heading mt-1.5">แม่น้ำเจ้าพระยา สถานี C.2</h3>
+            <p class="text-[11px] text-slate-400">อ.เมือง จ.นครสวรรค์</p>
+
+            <div class="mt-2.5 grid grid-cols-2 gap-1.5 text-center">
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-amber-300 font-semibold block">ปี 2554 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">4,236</span>
+                <span class="text-[9px] text-slate-400 block">(สูงสุด 4,686)</span>
+              </div>
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-cyan-300 font-semibold block">ปี 2565 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">3,054</span>
+                <span class="text-[9px] text-slate-400 block">(11 ต.ค. 2565)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-[#142342] flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-medium">ปัจจุบัน (อัตราไหล):</span>
+            <span class="text-xs sm:text-sm font-bold text-amber-400 font-heading" id="cmp-val-c2">1,904 ลบ.ม./วิ</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Chao Phraya Dam (Chai Nat) -->
+        <div
+          class="bg-[#0a1224] border border-rose-900/60 rounded-xl p-3 shadow-lg hover:border-rose-700 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-1.5 border-b border-[#142342]">
+              <span class="text-[10px] font-semibold text-rose-400">เขื่อนทดน้ำหลัก</span>
+              <span
+                class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-rose-950 text-rose-400 border border-rose-800 animate-pulse">วิกฤตระบายเพิ่ม</span>
+            </div>
+            <h3 class="text-sm font-bold text-white font-heading mt-1.5">เขื่อนเจ้าพระยา</h3>
+            <p class="text-[11px] text-slate-400">อ.สรรพยา จ.ชัยนาท</p>
+
+            <div class="mt-2.5 grid grid-cols-2 gap-1.5 text-center">
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-amber-300 font-semibold block">ปี 2554 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">3,703</span>
+                <span class="text-[9px] text-slate-400 block">(สูงสุด 3,721)</span>
+              </div>
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-cyan-300 font-semibold block">ปี 2565 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">3,164</span>
+                <span class="text-[9px] text-slate-400 block">(11 ต.ค. 2565)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-[#142342] flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-medium">ปัจจุบัน (ระบาย):</span>
+            <span class="text-xs sm:text-sm font-bold text-rose-400 font-heading" id="cmp-val-cyp">2,200 ลบ.ม./วิ</span>
+          </div>
+        </div>
+
+        <!-- Card 3: C.29A Bang Sai (Ayutthaya) -->
+        <div
+          class="bg-[#0a1224] border border-[#172544] rounded-xl p-3 shadow-lg hover:border-slate-600 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-1.5 border-b border-[#142342]">
+              <span class="text-[10px] font-semibold text-slate-400">จุดค้ำยันก่อนเข้า กทม.</span>
+              <span
+                class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-amber-950 text-amber-400 border border-amber-800">เฝ้าระวังสูง</span>
+            </div>
+            <h3 class="text-sm font-bold text-white font-heading mt-1.5">สถานี C.29A บางไทร</h3>
+            <p class="text-[11px] text-slate-400">อ.บางไทร จ.พระนครศรีอยุธยา</p>
+
+            <div class="mt-2.5 grid grid-cols-2 gap-1.5 text-center">
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-amber-300 font-semibold block">ปี 2554 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">4,100</span>
+                <span class="text-[9px] text-slate-400 block">(น้ำท่วมล้นคันกั้น)</span>
+              </div>
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-cyan-300 font-semibold block">ปี 2565 (พีค)</span>
+                <span class="text-sm font-extrabold text-white font-heading">3,090</span>
+                <span class="text-[9px] text-slate-400 block">(11 ต.ค. 2565)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-[#142342] flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-medium">ปัจจุบัน (อัตราไหล):</span>
+            <span class="text-xs sm:text-sm font-bold text-amber-400 font-heading" id="cmp-val-c29a">2,250
+              ลบ.ม./วิ</span>
+          </div>
+        </div>
+
+        <!-- Card 4: Mae Klong Dam (West - 3,000 m3/s Severe Surge) -->
+        <div
+          class="bg-[#1f0308] border border-rose-500/80 rounded-xl p-3 shadow-2xl hover:border-rose-400 transition-all flex flex-col justify-between critical-glow">
+          <div>
+            <div class="flex items-center justify-between pb-1.5 border-b border-rose-900/60">
+              <span class="text-[10px] font-semibold text-rose-300">ลุ่มน้ำฝั่งตะวันตก</span>
+              <span
+                class="px-2 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white animate-bounce">วิกฤตสูงสุด!</span>
+            </div>
+            <h3 class="text-sm font-bold text-white font-heading mt-1.5">เขื่อนแม่กลอง (K.10)</h3>
+            <p class="text-[11px] text-rose-200">อ.ท่าม่วง จ.กาญจนบุรี</p>
+
+            <div class="mt-2.5 grid grid-cols-2 gap-1.5 text-center">
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-rose-400 font-bold block">ปี 2539 (พีคสุด)</span>
+                <span class="text-sm font-extrabold text-rose-300 font-heading">3,600</span>
+                <span class="text-[9px] text-slate-400 block">(ราชบุรี +5.50ม.)</span>
+              </div>
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-cyan-300 font-semibold block">ปี 2565</span>
+                <span class="text-sm font-extrabold text-white font-heading">850</span>
+                <span class="text-[9px] text-slate-400 block">(ควบคุมปกติ)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-rose-900/60 flex items-center justify-between">
+            <span class="text-[11px] text-rose-300 font-bold">ปัจจุบัน (ระบาย):</span>
+            <span class="text-xs sm:text-sm font-black text-rose-400 font-heading animate-pulse"
+              id="cmp-val-maeklong">3,000 ลบ.ม./วิ</span>
+          </div>
+        </div>
+
+        <!-- Card 5: Bang Pakong / Kabin Buri -->
+        <div
+          class="bg-[#0a1224] border border-[#172544] rounded-xl p-3 shadow-lg hover:border-slate-600 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-1.5 border-b border-[#142342]">
+              <span class="text-[10px] font-semibold text-indigo-400">ลุ่มน้ำฝั่งตะวันออก</span>
+              <span
+                class="px-2 py-0.5 rounded text-[9.5px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">ระบายปกติ</span>
+            </div>
+            <h3 class="text-sm font-bold text-white font-heading mt-1.5">KGT.3 กบินทร์บุรี</h3>
+            <p class="text-[11px] text-slate-400">ต้นน้ำบางปะกง จ.ปราจีนบุรี</p>
+
+            <div class="mt-2.5 grid grid-cols-2 gap-1.5 text-center">
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-rose-400 font-bold block">ปี 2556 (พีคสุด)</span>
+                <span class="text-sm font-extrabold text-rose-300 font-heading">758</span>
+                <span class="text-[9px] text-slate-400 block">(+11.99 ม.รทก.)</span>
+              </div>
+              <div class="bg-[#0d1830] p-1.5 rounded-lg border border-[#172544]">
+                <span class="text-[10px] text-cyan-300 font-semibold block">ปี 2554</span>
+                <span class="text-sm font-extrabold text-white font-heading">480</span>
+                <span class="text-[9px] text-slate-400 block">(น้ำหลากล้นตลิ่ง)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-[#142342] flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 font-medium">ปัจจุบัน (อัตราไหล):</span>
+            <span class="text-xs sm:text-sm font-bold text-indigo-300 font-heading" id="cmp-val-kgt3">310
+              ลบ.ม./วิ</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Gulf of Thailand Inflow Distribution Modal -->
+  <div id="gulfModal"
+    class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200">
+    <div
+      class="bg-[#0a1224] border border-cyan-500/60 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-transform scale-95"
+      id="gulfModalBox">
+
+      <!-- Modal Header -->
+      <div class="p-3.5 sm:p-5 border-b border-[#142342] flex items-center justify-between bg-[#081022]">
+        <div class="flex items-center gap-2.5">
+          <div
+            class="w-10 h-10 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-500 flex items-center justify-center shadow-md shrink-0 text-xl">
+            🌊
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-white font-heading">มวลน้ำระบายรวมสู่อ่าวไทย</h3>
+            <p class="text-xs text-cyan-400 font-medium">สัดส่วนการไหลของน้ำ 3 สายหลักก่อนลงทะเล</p>
+          </div>
+        </div>
+        <button onclick="closeGulfModal()"
+          class="w-8 h-8 rounded-lg bg-[#142342] hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Content Body -->
+      <div class="p-4 sm:p-6 space-y-4">
+
+        <!-- Big Number Indicator -->
+        <div class="bg-[#060b17] p-3.5 rounded-xl border border-cyan-500/40 text-center relative overflow-hidden">
+          <div
+            class="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-500/10 to-transparent animate-pulse pointer-events-none">
+          </div>
+          <span class="text-xs text-slate-400 block font-medium">อัตราการระบายน้ำรวมทั้งประเทศลงสู่อ่าวไทย</span>
+          <span id="gulfModalTotalVal" class="text-3xl sm:text-4xl font-black text-cyan-300 font-heading">5,580</span>
+          <span class="text-sm font-semibold text-slate-400"> ลบ.ม./วินาที</span>
+          <p class="text-[11px] text-rose-400 font-medium mt-1">⚠️
+            อัตราไหลสูงกว่าปกติจากวิกฤตการระบายน้ำของเขื่อนแม่กลอง</p>
+        </div>
+
+        <!-- Breakdown by Basin with Progress Bars -->
+        <div class="space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">สัดส่วนแยกตามลุ่มน้ำ</h4>
+
+          <!-- 1. Mae Klong (West) -->
+          <div class="bg-[#0d1830] p-3 rounded-xl border border-rose-900/60 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-rose-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                <span>ฝั่งตะวันตก (แม่น้ำแม่กลอง)</span>
+              </span>
+              <span class="font-mono font-bold text-white">2,850 ลบ.ม./วิ <span
+                  class="text-rose-400 font-semibold">(51.1%)</span></span>
+            </div>
+            <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-rose-600 to-rose-400 h-full rounded-full transition-all duration-700"
+                style="width: 51.1%"></div>
+            </div>
+            <p class="text-[10px] text-slate-400">มวลน้ำหลักจากเขื่อนแม่กลอง ไหลผ่านราชบุรีออกสู่อ่าวไทยที่สมุทรสงคราม
+            </p>
+          </div>
+
+          <!-- 2. Chao Phraya + Tha Chin (Central) -->
+          <div class="bg-[#0d1830] p-3 rounded-xl border border-sky-900/60 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-sky-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                <span>แกนกลาง (เจ้าพระยา + ท่าจีน)</span>
+              </span>
+              <span class="font-mono font-bold text-white">2,420 ลบ.ม./วิ <span
+                  class="text-sky-400 font-semibold">(43.4%)</span></span>
+            </div>
+            <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-sky-600 to-cyan-400 h-full rounded-full transition-all duration-700"
+                style="width: 43.4%"></div>
+            </div>
+            <p class="text-[10px] text-slate-400">บางไทร-กทม. ออกปากน้ำสมุทรปราการ (1,950) และผันออกแม่น้ำท่าจีน (310 +
+              ซอยคลอง)</p>
+          </div>
+
+          <!-- 3. Bang Pakong (East) -->
+          <div class="bg-[#0d1830] p-3 rounded-xl border border-indigo-900/60 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-indigo-400 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                <span>ฝั่งตะวันออก (แม่น้ำบางปะกง)</span>
+              </span>
+              <span class="font-mono font-bold text-white">310 ลบ.ม./วิ <span
+                  class="text-indigo-400 font-semibold">(5.5%)</span></span>
+            </div>
+            <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden">
+              <div
+                class="bg-gradient-to-r from-indigo-600 to-purple-400 h-full rounded-full transition-all duration-700"
+                style="width: 5.5%"></div>
+            </div>
+            <p class="text-[10px] text-slate-400">ระบายผ่าน ปตร.บางปะกง จ.ฉะเชิงเทรา สู่ปากอ่าวบางปะกง</p>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3.5 border-t border-[#142342] bg-[#081022] flex justify-end">
+        <button onclick="closeGulfModal()"
+          class="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white transition-all shadow-md">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+
     </div>
   </div>
 
-  <!-- Main Canvas / Schematic Diagram View -->
-  <main class="flex-1 overflow-auto p-4 md:p-8 flex justify-center items-start">
-    <div class="relative w-full max-w-5xl bg-slate-950/80 border border-slate-800 rounded-xl p-6 shadow-2xl overflow-hidden">
-      
-      <!-- SVG แม่น้ำและอนิเมชันน้ำไหล -->
-      <svg class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="gulfGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#0284c7" stop-opacity="0.2"/>
-            <stop offset="100%" stop-color="#0369a1" stop-opacity="0.8"/>
-          </linearGradient>
-        </defs>
+  <!-- Station Detail Modal / Popup Dialog -->
+  <div id="nodeModal"
+    class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm hidden opacity-0 transition-opacity duration-200">
+    <div
+      class="bg-[#0a1224] border border-[#172544] w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-transform scale-95"
+      id="modalBox">
 
-        <!-- แม่น้ำเจ้าพระยา (กลาง) -->
-        <g id="path-chao_phraya">
-          <path d="M 512 85 L 512 180" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-c2" class="flow-stream" d="M 512 85 L 512 180" stroke="#38bdf8" stroke-width="4" fill="none"/>
-          
-          <path d="M 512 250 L 512 430" stroke="#0ea5e9" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-c13" class="flow-stream" d="M 512 250 L 512 430" stroke="#38bdf8" stroke-width="6" fill="none"/>
-
-          <path d="M 680 340 C 680 400, 525 380, 525 430" stroke="#0284c7" stroke-width="6" fill="none" opacity="0.4"/>
-          <path id="stream-rama6" class="flow-stream" d="M 680 340 C 680 400, 525 380, 525 430" stroke="#38bdf8" stroke-width="3" fill="none"/>
-
-          <path d="M 512 500 L 512 600" stroke="#0284c7" stroke-width="14" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-c29a" class="flow-stream" d="M 512 500 L 512 600" stroke="#38bdf8" stroke-width="8" fill="none"/>
-        </g>
-
-        <!-- แม่น้ำแม่กลอง (ฝั่งตะวันตก) -->
-        <g id="path-mae_klong">
-          <path d="M 180 230 L 180 360" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-maeklong-dam" class="flow-stream" d="M 180 230 L 180 360" stroke="#38bdf8" stroke-width="4" fill="none"/>
-
-          <path d="M 180 430 C 180 520, 320 580, 430 610" stroke="#0284c7" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-maeklong-sea" class="flow-stream" d="M 180 430 C 180 520, 320 580, 430 610" stroke="#38bdf8" stroke-width="5" fill="none"/>
-        </g>
-
-        <!-- แม่น้ำบางปะกง (ฝั่งตะวันออก) -->
-        <g id="path-bang_pakong">
-          <path d="M 840 230 L 840 360" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-bangpakong-dam" class="flow-stream" d="M 840 230 L 840 360" stroke="#38bdf8" stroke-width="4" fill="none"/>
-
-          <path d="M 840 430 C 840 520, 700 580, 590 610" stroke="#0284c7" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.4"/>
-          <path id="stream-bangpakong-sea" class="flow-stream" d="M 840 430 C 840 520, 700 580, 590 610" stroke="#38bdf8" stroke-width="5" fill="none"/>
-        </g>
-      </svg>
-
-      <!-- โหนดจุดตรวจวัดและเขื่อน (HTML Grid Components) -->
-      <div class="relative z-10 grid grid-cols-3 gap-6">
-
-        <!-- คอลัมน์ 1: แม่น้ำแม่กลอง -->
-        <div id="col-mae_klong" class="basin-col flex flex-col items-center gap-12">
-          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
-            แม่น้ำแม่กลอง (ตะวันตก)
+      <!-- Modal Header -->
+      <div class="p-3.5 sm:p-5 border-b border-[#142342] flex items-center justify-between bg-[#081022]">
+        <div class="flex items-center gap-2.5">
+          <div id="modalIconBox"
+            class="w-9 h-9 rounded-xl bg-cyan-950/80 text-cyan-400 border border-cyan-800 flex items-center justify-center shadow-md shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
           </div>
-
-          <!-- เขื่อนศรีนครินทร์ -->
-          <div id="node-srinagarind" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (EGAT)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนศรีนครินทร์</h4>
-            <div class="mt-2 text-xs text-slate-400">ระบายน้ำลงลำน้ำ</div>
-            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+          <div>
+            <h3 id="modalTitle" class="text-sm sm:text-base font-bold text-white font-heading">ชื่อสถานี</h3>
+            <p id="modalLocation" class="text-[11px] text-slate-400">ตำแหน่ง / อำเภอ / จังหวัด</p>
           </div>
+        </div>
+        <button onclick="closeNodeModal()"
+          class="w-8 h-8 rounded-lg bg-[#142342] hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center">
+          ✕
+        </button>
+      </div>
 
-          <!-- เขื่อนแม่กลอง -->
-          <div id="node-maeklong_dam" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-8 transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station K.10 (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนแม่กลอง (K.10)</h4>
-            <div class="mt-2 text-xs text-slate-400">ปริมาณน้ำไหลผ่าน</div>
-            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+      <!-- Modal Content Body -->
+      <div class="p-3.5 sm:p-5 space-y-3.5 max-h-[75vh] overflow-y-auto">
+
+        <!-- Flow & Capacity Gauge -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="bg-[#060b17] p-2.5 rounded-xl border border-[#172544]">
+            <span class="text-[11px] text-slate-400 block">อัตราการระบาย / ไหลผ่าน</span>
+            <span id="modalFlowVal" class="text-lg sm:text-xl font-extrabold text-cyan-400 font-heading">2,200</span>
+            <span class="text-[10px] text-slate-400"> ลบ.ม./วินาที</span>
+          </div>
+          <div class="bg-[#060b17] p-2.5 rounded-xl border border-[#172544]">
+            <span class="text-[11px] text-slate-400 block">ปริมาตรน้ำกักเก็บ (% รนก.)</span>
+            <span id="modalStorageVal" class="text-lg sm:text-xl font-extrabold text-amber-400 font-heading">78%</span>
+            <span id="modalStorageCap" class="text-[10px] text-slate-400 block">จากความจุ 100%</span>
           </div>
         </div>
 
-        <!-- คอลัมน์ 2: แม่น้ำเจ้าพระยา (สายหลัก) -->
-        <div id="col-chao_phraya" class="basin-col flex flex-col items-center gap-8">
-          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
-            แม่น้ำเจ้าพระยา (แกนกลาง)
-          </div>
-
-          <!-- จุดที่ 1: สถานี C.2 นครสวรรค์ -->
-          <div id="node-C2" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.2 (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)</h4>
-            <div class="mt-2 text-xs text-slate-400">ปริมาณน้ำไหลผ่าน</div>
-            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
-          </div>
-
-          <!-- จุดที่ 2: เขื่อนเจ้าพระยา (ชัยนาท) -->
-          <div id="node-C13" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.13 (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนเจ้าพระยา (ชัยนาท)</h4>
-            <div class="mt-2 text-xs text-slate-400">ระบายน้ำท้ายเขื่อน</div>
-            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
-          </div>
-
-          <!-- จุดที่ 3: สถานี C.29A บางไทร -->
-          <div id="node-C29A" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-14 transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Station C.29A (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">สถานีบางไทร (อยุธยา)</h4>
-            <div class="mt-2 text-xs text-slate-400">จุดรวมน้ำก่อนเข้า กทม.</div>
-            <div class="text-xl font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
+        <!-- Historical Benchmark -->
+        <div class="space-y-1.5">
+          <h4 class="text-[11px] font-bold uppercase tracking-wider text-slate-400">สถิติเปรียบเทียบเทียบเคียง</h4>
+          <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="bg-[#0d1830] p-2 rounded-lg border border-[#172544]">
+              <span class="text-slate-400 block text-[9.5px]">วิกฤตปี 2554</span>
+              <span id="modalStat54" class="font-bold text-amber-300 font-heading">3,721</span>
+            </div>
+            <div class="bg-[#0d1830] p-2 rounded-lg border border-[#172544]">
+              <span class="text-slate-400 block text-[9.5px]">น้ำมากปี 2565</span>
+              <span id="modalStat65" class="font-bold text-cyan-300 font-heading">3,164</span>
+            </div>
+            <div class="bg-[#0d1830] p-2 rounded-lg border border-[#172544]">
+              <span class="text-slate-400 block text-[9.5px]">เกณฑ์วิกฤตตลิ่ง</span>
+              <span id="modalCritical" class="font-bold text-rose-400 font-heading">2,000+</span>
+            </div>
           </div>
         </div>
 
-        <!-- คอลัมน์ 3: แม่น้ำบางปะกง + ป่าสัก -->
-        <div id="col-bang_pakong" class="basin-col flex flex-col items-center gap-8">
-          <div class="w-full text-center pb-2 border-b border-sky-800/60 text-sky-400 font-bold text-sm">
-            แม่น้ำป่าสัก & บางปะกง (ตะวันออก)
-          </div>
-
-          <!-- เขื่อนป่าสักชลสิทธิ์ -->
-          <div id="node-pasak" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนป่าสักชลสิทธิ์</h4>
-            <div class="mt-2 text-xs text-slate-400">ระบายน้ำลงแม่น้ำป่าสัก</div>
-            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
-          </div>
-
-          <!-- เขื่อนพระรามหก -->
-          <div id="node-rama6" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-cyan-900/60 text-cyan-300 font-mono">Weir / Runoff (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนพระรามหก</h4>
-            <div class="mt-2 text-xs text-slate-400">ระบายน้ำสมทบเจ้าพระยา</div>
-            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
-          </div>
-
-          <!-- เขื่อนขุนด่านฯ -->
-          <div id="node-khundan" class="node-card w-64 bg-slate-800/90 border border-slate-700 rounded-lg p-3 text-center shadow-lg mt-14 transition duration-300">
-            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 font-mono">Large Dam (RID)</span>
-            <h4 class="font-bold text-sm text-slate-100 mt-1">เขื่อนขุนด่านปราการชล</h4>
-            <div class="mt-2 text-xs text-slate-400">ระบายน้ำสู่บางปะกง</div>
-            <div class="text-lg font-black text-emerald-400 mt-0.5 flow-val">-- <span class="text-xs font-normal">ลบ.ม./วิ</span></div>
-          </div>
+        <!-- Note Text -->
+        <div id="modalAdvisory"
+          class="p-3 rounded-xl bg-[#081022] border border-[#142342] text-xs text-slate-300 flex items-start gap-2.5">
+          <svg class="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span id="modalNoteText">ปริมาณน้ำปัจจุบันยังอยู่ในการควบคุมของศูนย์อำนวยการน้ำแห่งชาติ</span>
         </div>
 
       </div>
 
-      <!-- ปลายน้ำ: อ่าวไทย -->
-      <div class="mt-12 w-full h-24 rounded-lg border-2 border-dashed border-sky-500/40 bg-gradient-to-t from-sky-900/60 to-transparent flex items-center justify-center relative z-10">
-        <div class="text-center">
-          <span class="text-2xl">🌊</span>
-          <h3 class="font-black text-sky-300 tracking-wider">อ่าวไทย (GULF OF THAILAND)</h3>
-          <p class="text-xs text-sky-400/80">
-            ปริมาณน้ำรวมสู่อ่าวไทย: <span id="totalGulfDischarge" class="font-bold text-emerald-400 text-sm">-- ลบ.ม./วิ</span>
-          </p>
-        </div>
+      <!-- Modal Footer -->
+      <div class="p-3.5 border-t border-[#142342] bg-[#081022] flex justify-end">
+        <button onclick="closeNodeModal()"
+          class="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold text-white transition-all shadow-md">
+          ปิดหน้าต่าง
+        </button>
       </div>
 
     </div>
-  </main>
+  </div>
+
+  <!-- ThaiWater API Configuration Modal -->
+  <div id="configModal"
+    class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-[#0a1224] border border-[#172544] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-2.5 border-b border-[#142342]">
+        <h3 class="text-sm sm:text-base font-bold text-cyan-400 flex items-center gap-2 font-heading">
+          <span>⚙️</span> ตั้งค่าเชื่อมต่อ ThaiWater API
+        </h3>
+        <button onclick="toggleConfigModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Standard Base API URL:</label>
+          <input type="text" id="cfgBaseUrl" value="https://api.my.go.th/twsapi/v1.0"
+            class="w-full bg-[#060b17] border border-[#172544] rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-cyan-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Authorization Token / API Key:</label>
+          <input type="password" id="cfgApiKey" placeholder="ใส่ Bearer Token หรือ API Key ของ DGA/สสน."
+            class="w-full bg-[#060b17] border border-[#172544] rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-cyan-500 focus:outline-none" />
+        </div>
+
+        <div class="p-2.5 bg-[#0d1830] rounded-xl border border-[#172544] space-y-1">
+          <span class="font-bold text-slate-200 block">สถานะระบบ:</span>
+          <span class="text-emerald-400 font-medium block">✓ ข้อมูลสถานการณ์น้ำจริง พร้อมใช้งานทั้ง Desktop และ
+            Mobile</span>
+        </div>
+      </div>
+
+      <div class="pt-1 flex justify-end gap-2">
+        <button onclick="toggleConfigModal()"
+          class="px-3.5 py-1.5 bg-[#142342] hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">ยกเลิก</button>
+        <button onclick="saveAndApplyApiConfig()"
+          class="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold shadow-md">บันทึก</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    // === ตั้งค่าเชื่อมต่อ SUPABASE ===
+    /**
+     * ฐานข้อมูลอุทกวิทยาครบทั้ง 3 สายน้ำหลัก (รวมสถิติน้ำท่วมประวัติศาสตร์)
+     */
+    const hydroData = {
+      // 1. CHAO PHRAYA MAIN STEM & TRIBUTARIES
+      c2: {
+        name: "สถานี C.2 นครสวรรค์",
+        location: "อ.เมือง จ.นครสวรรค์ (จุดรวม ปิง วัง ยม น่าน)",
+        basin: "chao_phraya",
+        type: "station",
+        current: 1904,
+        y2565: 3054,
+        y2554: 4236,
+        y2539: 2100,
+        y2556: 2200,
+        critical: 2800,
+        storage: null,
+        note: "จุดรวมน้ำ 4 สายหลักก่อนเข้าสู่เขื่อนเจ้าพระยา ระดับน้ำเพิ่มขึ้นต่อเนื่อง เฝ้าระวังน้ำหลาก"
+      },
+      cyp_dam: {
+        name: "เขื่อนเจ้าพระยา (ชัยนาท)",
+        location: "อ.สรรพยา จ.ชัยนาท",
+        basin: "chao_phraya",
+        type: "dam",
+        current: 2200,
+        y2565: 3164,
+        y2554: 3703,
+        y2539: 1800,
+        y2556: 1900,
+        critical: 2000,
+        storage: 78,
+        note: "ปรับเพิ่มการระบายน้ำเป็น 2,200 ลบ.ม./วิ ส่งผลให้พื้นที่ลุ่มต่ำนอกคันกั้นน้ำท้ายเขื่อน จ.อ่างทอง อยุธยา มีระดับน้ำสูงขึ้น"
+      },
+      tha_chin: {
+        name: "ผันน้ำเข้าแม่น้ำท่าจีน",
+        location: "คลองมะขามเฒ่า-อู่ทอง จ.สุพรรณบุรี",
+        basin: "chao_phraya",
+        type: "station",
+        current: 310,
+        y2565: 480,
+        y2554: 550,
+        y2539: 380,
+        y2556: 410,
+        critical: 500,
+        storage: null,
+        note: "ประตูพลเทพรับน้ำเข้าฝั่งตะวันตกลงสู่แม่น้ำท่าจีน เพื่อช่วยตัดยอดน้ำหลากแกนกลางเจ้าพระยา"
+      },
+      pasak_dam: {
+        name: "เขื่อนป่าสักชลสิทธิ์",
+        location: "อ.พัฒนานิคม จ.ลพบุรี",
+        basin: "chao_phraya",
+        type: "dam",
+        current: 115,
+        y2565: 900,
+        y2554: 1200,
+        y2539: 350,
+        y2556: 550,
+        critical: 600,
+        storage: 65,
+        note: "กักเก็บน้ำต้นทุนลุ่มป่าสัก และระบายลงสู่เขื่อนพระรามหกตามแผนบริหารจัดการน้ำหลาก"
+      },
+      rama6_dam: {
+        name: "เขื่อนพระรามหก",
+        location: "อ.ท่าเรือ จ.พระนครศรีอยุธยา",
+        basin: "chao_phraya",
+        type: "dam",
+        current: 410,
+        y2565: 1038,
+        y2554: 1400,
+        y2539: 400,
+        y2556: 450,
+        critical: 600,
+        storage: 58,
+        note: "ควบคุมน้ำแม่น้ำป่าสักก่อนไหลบรรจบแม่น้ำเจ้าพระยาที่เกาะเมืองอยุธยา"
+      },
+      c29a: {
+        name: "สถานี C.29A บางไทร",
+        location: "อ.บางไทร จ.พระนครศรีอยุธยา",
+        basin: "chao_phraya",
+        type: "station",
+        current: 2250,
+        y2565: 3090,
+        y2554: 4100,
+        y2539: 1950,
+        y2556: 2100,
+        critical: 3000,
+        storage: null,
+        note: "จุดชี้วัดมวลน้ำรวมก่อนไหลเข้าสู่พื้นที่กรุงเทพมหานครและปริมณฑล คันกั้นน้ำรับได้ ~3,500 ลบ.ม./วิ"
+      },
+      bkk: {
+        name: "กทม. และสมุทรปราการ",
+        location: "ปากน้ำเจ้าพระยา ออกสู่อ่าวไทย",
+        basin: "chao_phraya",
+        type: "station",
+        current: 1950,
+        y2565: 3300,
+        y2554: 4200,
+        y2539: 2150,
+        y2556: 2300,
+        critical: 3500,
+        storage: null,
+        note: "เฝ้าระวังช่วงน้ำทะเลหนุนสูง ปัจจุบันแนวป้องกันน้ำท่วมริมแม่น้ำเจ้าพระยายังสามารถรองรับได้"
+      },
+
+      // 2. MAE KLONG BASIN (WEST - CRITICAL 3,000 M3/S SURGE)
+      srinagarind: {
+        name: "เขื่อนศรีนครินทร์ (แควใหญ่)",
+        location: "อ.ศรีสวัสดิ์ จ.กาญจนบุรี",
+        basin: "mae_klong",
+        type: "dam",
+        current: 180,
+        y2565: 290,
+        y2554: 340,
+        y2539: 1200,
+        y2556: 350,
+        critical: 600,
+        storage: 84,
+        note: "เขื่อนเก็บกักน้ำขนาดใหญ่ที่สุดในภาคตะวันตก ผลิตไฟฟ้าและควบคุมลุ่มน้ำแม่กลอง"
+      },
+      vajiralongkorn: {
+        name: "เขื่อนวชิราลงกรณ (แควน้อย)",
+        location: "อ.ทองผาภูมิ จ.กาญจนบุรี",
+        basin: "mae_klong",
+        type: "dam",
+        current: 120,
+        y2565: 240,
+        y2554: 280,
+        y2539: 800,
+        y2556: 260,
+        critical: 500,
+        storage: 81,
+        note: "ระบายน้ำลงสู่แควน้อย ก่อนไปบรรจบกับแควใหญ่ที่ อ.เมือง กาญจนบุรี"
+      },
+      maeklong_dam: {
+        name: "เขื่อนแม่กลอง",
+        location: "อ.ท่าม่วง จ.กาญจนบุรี",
+        basin: "mae_klong",
+        type: "dam",
+        current: 3000,
+        y2565: 850,
+        y2554: 980,
+        y2539: 3600,
+        y2556: 800,
+        critical: 1200,
+        storage: 92,
+        note: "ประกาศเตือนภัยขั้นวิกฤตสีแดง! ปรับการระบายน้ำสู่ 3,000 ลบ.ม./วิ ท้ายเขื่อนเพิ่มขึ้น 1.5 - 2.5 เมตร ให้ประชาชนริมน้ำยกของขึ้นที่สูงทันที"
+      },
+      ratchaburi: {
+        name: "สถานีราชบุรี - สมุทรสงคราม",
+        location: "แม่น้ำแม่กลอง จ.ราชบุรี สู่ปากอ่าวสมุทรสงคราม",
+        basin: "mae_klong",
+        type: "station",
+        current: 2850,
+        y2565: 810,
+        y2554: 930,
+        y2539: 3500,
+        y2556: 780,
+        critical: 1100,
+        storage: null,
+        note: "มวลน้ำจากเขื่อนแม่กลองหลากถึงตัวเมืองราชบุรีและอัมพวา ระดับน้ำล้นตลิ่งในพื้นที่ลุ่มต่ำ"
+      },
+
+      // 3. BANG PAKONG BASIN (EAST)
+      khundan: {
+        name: "เขื่อนขุนด่านปราการชล",
+        location: "อ.เมือง จ.นครนายก",
+        basin: "bang_pakong",
+        type: "dam",
+        current: 50,
+        y2565: 140,
+        y2554: 160,
+        y2539: 80,
+        y2556: 180,
+        critical: 200,
+        storage: 85,
+        note: "ควบคุมน้ำแม่น้ำนครนายกก่อนไหลรวมกับแม่น้ำปราจีนบุรี"
+      },
+      naruebodinda: {
+        name: "เขื่อนนฤบดินทรจินดา",
+        location: "อ.นาดี จ.ปราจีนบุรี",
+        basin: "bang_pakong",
+        type: "dam",
+        current: 40,
+        y2565: 95,
+        y2554: 120,
+        y2539: 50,
+        y2556: 160,
+        critical: 180,
+        storage: 79,
+        note: "ตัดยอดน้ำป่าจากอุทยานแห่งชาติทับลาน ลดอุทกภัยกบินทร์บุรี"
+      },
+      khlong_si_yat: {
+        name: "เขื่อนคลองสียัด",
+        location: "อ.ท่าตะเกียบ จ.ฉะเชิงเทรา",
+        basin: "bang_pakong",
+        type: "dam",
+        current: 15,
+        y2565: 60,
+        y2554: 75,
+        y2539: 40,
+        y2556: 95,
+        critical: 110,
+        storage: 62,
+        note: "แหล่งเก็บกักน้ำสำคัญฝั่งฉะเชิงเทรา ส่งน้ำช่วยพื้นที่เกษตรและอุตสาหกรรม EEC"
+      },
+      bangpakong_gate: {
+        name: "ปตร. แม่น้ำบางปะกง",
+        location: "ต้นน้ำกบินทร์บุรี - ปลายน้ำบางปะกง จ.ฉะเชิงเทรา",
+        basin: "bang_pakong",
+        type: "dam",
+        current: 310,
+        y2565: 620,
+        y2554: 480,
+        y2539: 300,
+        y2556: 758,
+        critical: 650,
+        storage: null,
+        note: "KGT.3 วัดได้ 310 ลบ.ม./วิ สภาพการระบายออกสู่ปากอ่าวบางปะกงคล่องตัว"
+      },
+      gulf: {
+        name: "อ่าวไทย (Gulf of Thailand)",
+        location: "จุดรวมระบายน้ำลงสู่ทะเล ทั้งฝั่งตะวันตก แกนกลาง และตะวันออก",
+        basin: "all",
+        type: "station",
+        current: 5580,
+        y2565: 4720,
+        y2554: 8500,
+        y2539: 7200,
+        y2556: 3800,
+        critical: 6000,
+        storage: null,
+        note: "จุดระบายมวลน้ำทั้งหมดออกสู่อ่าวไทย รวมเจ้าพระยา ท่าจีน แม่กลอง (3,000) และบางปะกง รวม 5,580 ลบ.ม./วิ"
+      }
+    };
+
+    // State Variables
+    let currentBasin = 'all';
+    let currentYearMode = 'current';
+    let isSurgeActive = false;
+    let currentFlowDuration = 1.4;
+
+    // ViewBox Presets for Smart Auto-Zooming
+    const VIEWBOX_PRESETS = {
+      'all': { x: 0, y: 0, w: 1000, h: 820 },
+      'chao_phraya': { x: 260, y: 10, w: 480, h: 810 },
+      'mae_klong': { x: 10, y: 10, w: 390, h: 810 },
+      'bang_pakong': { x: 580, y: 10, w: 420, h: 810 }
+    };
+
+    let curVB = { x: 0, y: 0, w: 1000, h: 820 };
+    let targetVB = { x: 0, y: 0, w: 1000, h: 820 };
+    let animFrameId = null;
+
+    /**
+     * Smoothly animate SVG ViewBox to target coordinates
+     */
+    function animateViewBox() {
+      const svg = document.getElementById('schematicSvg');
+      if (!svg) return;
+
+      const factor = 0.2; // Ease speed
+      curVB.x += (targetVB.x - curVB.x) * factor;
+      curVB.y += (targetVB.y - curVB.y) * factor;
+      curVB.w += (targetVB.w - curVB.w) * factor;
+      curVB.h += (targetVB.h - curVB.h) * factor;
+
+      svg.setAttribute('viewBox', `${curVB.x.toFixed(2)} ${curVB.y.toFixed(2)} ${curVB.w.toFixed(2)} ${curVB.h.toFixed(2)}`);
+
+      const dx = Math.abs(targetVB.x - curVB.x);
+      const dy = Math.abs(targetVB.y - curVB.y);
+      const dw = Math.abs(targetVB.w - curVB.w);
+
+      if (dx > 0.5 || dy > 0.5 || dw > 0.5) {
+        animFrameId = requestAnimationFrame(animateViewBox);
+      } else {
+        curVB = { ...targetVB };
+        svg.setAttribute('viewBox', `${curVB.x} ${curVB.y} ${curVB.w} ${curVB.h}`);
+      }
+    }
+
+    function setTargetViewBox(vb) {
+      targetVB = { ...vb };
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      animFrameId = requestAnimationFrame(animateViewBox);
+    }
+
+    /**
+     * Basin Selection & Smart Focus Zoom
+     */
+    function selectBasin(basinKey) {
+      currentBasin = basinKey;
+
+      // Update Tab Styles
+      document.querySelectorAll('.basin-tab').forEach(tab => {
+        tab.classList.remove('bg-sky-600', 'text-white', 'shadow-sm', 'shadow-sky-600/30');
+        tab.classList.add('bg-[#0d1830]', 'text-slate-300');
+      });
+
+      const activeTab = document.getElementById(`tab-${basinKey}`);
+      if (activeTab) {
+        activeTab.classList.remove('bg-[#0d1830]', 'text-slate-300');
+        activeTab.classList.add('bg-sky-600', 'text-white', 'shadow-sm', 'shadow-sky-600/30');
+      }
+
+      // Smooth Auto-Zoom to selected basin
+      const targetPreset = VIEWBOX_PRESETS[basinKey] || VIEWBOX_PRESETS['all'];
+      setTargetViewBox(targetPreset);
+
+      // Dim non-selected basins slightly to highlight active flow
+      const basinGroups = ['mae_klong', 'chao_phraya', 'bang_pakong'];
+      basinGroups.forEach(g => {
+        const el = document.getElementById(`group-${g}`);
+        if (!el) return;
+
+        if (basinKey === 'all' || basinKey === g) {
+          el.classList.remove('fade-dim');
+          el.classList.add('fade-focus');
+        } else {
+          el.classList.remove('fade-focus');
+          el.classList.add('fade-dim');
+        }
+      });
+    }
+
+    /**
+     * Floating Zoom In / Zoom Out Controls
+     */
+    function zoomCanvas(scaleMultiplier) {
+      const newW = targetVB.w / scaleMultiplier;
+      const newH = targetVB.h / scaleMultiplier;
+
+      // Keep center point stable during zoom
+      const centerX = targetVB.x + targetVB.w / 2;
+      const centerY = targetVB.y + targetVB.h / 2;
+
+      targetVB.w = Math.max(250, Math.min(1200, newW));
+      targetVB.h = Math.max(200, Math.min(980, newH));
+      targetVB.x = centerX - targetVB.w / 2;
+      targetVB.y = centerY - targetVB.h / 2;
+
+      setTargetViewBox(targetVB);
+    }
+
+    function resetCanvasView() {
+      selectBasin('all');
+    }
+
+    /**
+     * Touch & Mouse Drag to Pan Canvas
+     */
+    const viewport = document.getElementById('canvasViewport');
+    let isDragging = false;
+    let startPoint = { x: 0, y: 0 };
+    let startVB = { x: 0, y: 0 };
+
+    function onPointerDown(e) {
+      isDragging = true;
+      startPoint = { x: e.clientX, y: e.clientY };
+      startVB = { x: targetVB.x, y: targetVB.y };
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      const svg = document.getElementById('schematicSvg');
+      const rect = svg.getBoundingClientRect();
+
+      const scaleX = targetVB.w / rect.width;
+      const scaleY = targetVB.h / rect.height;
+
+      const dx = (e.clientX - startPoint.x) * scaleX;
+      const dy = (e.clientY - startPoint.y) * scaleY;
+
+      targetVB.x = startVB.x - dx;
+      targetVB.y = startVB.y - dy;
+      curVB.x = targetVB.x;
+      curVB.y = targetVB.y;
+
+      svg.setAttribute('viewBox', `${curVB.x.toFixed(2)} ${curVB.y.toFixed(2)} ${curVB.w.toFixed(2)} ${curVB.h.toFixed(2)}`);
+    }
+
+    function onPointerUp() {
+      isDragging = false;
+    }
+
+    viewport.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    /**
+     * Switching Year / Historical Benchmark Modes
+     */
+    function setYearMode(mode) {
+      currentYearMode = mode;
+
+      // Sync Mobile Select Dropdown
+      const mobileSelect = document.getElementById('mobileYearSelect');
+      if (mobileSelect && mobileSelect.value !== mode) {
+        mobileSelect.value = mode;
+      }
+
+      // Sync Desktop Buttons
+      document.querySelectorAll('.year-btn').forEach(btn => {
+        btn.classList.remove('bg-cyan-500', 'text-slate-950', 'bg-amber-400', 'bg-rose-600', 'font-bold', 'shadow');
+        btn.classList.add('text-slate-300');
+      });
+
+      const activeBtn = {
+        'current': document.getElementById('btnYearCurrent'),
+        '2565': document.getElementById('btnYear2565'),
+        '2554': document.getElementById('btnYear2554'),
+        '2539': document.getElementById('btnYear2539'),
+        '2556': document.getElementById('btnYear2556'),
+        'compare': document.getElementById('btnYearCompare')
+      }[mode];
+
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-300');
+        if (mode === 'compare') {
+          activeBtn.classList.add('bg-amber-400', 'text-slate-950', 'font-bold', 'shadow');
+        } else if (mode === '2539') {
+          activeBtn.classList.add('bg-rose-600', 'text-white', 'font-bold', 'shadow');
+        } else {
+          activeBtn.classList.add('bg-cyan-500', 'text-slate-950', 'font-bold', 'shadow');
+        }
+      }
+
+      updateAllDisplays();
+    }
+
+    /**
+     * Retrieve station value by mode
+     */
+    function getStationValue(key) {
+      const item = hydroData[key];
+      if (!item) return 0;
+      if (currentYearMode === '2554') return item.y2554;
+      if (currentYearMode === '2565') return item.y2565;
+      if (currentYearMode === '2539') return item.y2539;
+      if (currentYearMode === '2556') return item.y2556;
+      if (isSurgeActive) return Math.round(item.current * 1.35);
+      return item.current;
+    }
+
+    /**
+     * Update all displays, SVG text values, and colors
+     */
+    function updateAllDisplays() {
+      const isSurge = isSurgeActive;
+
+      // 1. Update Native SVG Nodes
+      Object.keys(hydroData).forEach(nodeKey => {
+        const item = hydroData[nodeKey];
+        const valEl = document.getElementById(`val-${nodeKey}`);
+        const dotEl = document.getElementById(`dot-${nodeKey}`);
+
+        if (!valEl) return;
+
+        let displayVal = getStationValue(nodeKey);
+
+        if (item.type === 'dam' && nodeKey !== 'cyp_dam' && nodeKey !== 'bangpakong_gate') {
+          valEl.textContent = `ระบาย ${displayVal.toLocaleString()} ลบ.ม./วิ`;
+        } else {
+          valEl.textContent = `${displayVal.toLocaleString()} ลบ.ม./วิ`;
+        }
+
+        // Color coding logic
+        let statusColor = '#10b981';
+        if (displayVal >= item.critical) {
+          statusColor = '#f43f5e';
+          valEl.setAttribute('fill', '#f43f5e');
+        } else if (displayVal >= item.critical * 0.7) {
+          statusColor = '#f59e0b';
+          valEl.setAttribute('fill', '#fbbf24');
+        } else {
+          valEl.setAttribute('fill', '#2dd4bf');
+        }
+
+        if (dotEl) {
+          dotEl.setAttribute('fill', statusColor);
+        }
+      });
+
+      // 2. Update Top Key Metric Cards
+      const c2Val = getStationValue('c2');
+      const cypVal = getStationValue('cyp_dam');
+      const c29aVal = getStationValue('c29a');
+      const totalGulf = currentYearMode === 'current' && !isSurge
+        ? 5580
+        : Math.round(c29aVal + getStationValue('ratchaburi') + getStationValue('bangpakong_gate') + getStationValue('tha_chin'));
+
+      document.getElementById('statC2').innerHTML = `${c2Val.toLocaleString()} <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>`;
+      document.getElementById('statCYP').innerHTML = `${cypVal.toLocaleString()} <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>`;
+      document.getElementById('statC29A').innerHTML = `${c29aVal.toLocaleString()} <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>`;
+      document.getElementById('statGulfTotal').innerHTML = `${totalGulf.toLocaleString()} <span class="text-[10px] sm:text-xs font-normal text-slate-400">ลบ.ม./วิ</span>`;
+
+      // Update Gulf Badge on SVG Canvas
+      const gulfBadgeVal = document.getElementById('gulfBadgeVal');
+      if (gulfBadgeVal) gulfBadgeVal.textContent = totalGulf.toLocaleString();
+
+      // Update Gulf Modal Total
+      const gulfModalTotalVal = document.getElementById('gulfModalTotalVal');
+      if (gulfModalTotalVal) gulfModalTotalVal.textContent = totalGulf.toLocaleString();
+
+      // 3. Update Bottom Comparative Tags
+      document.getElementById('cmp-val-c2').textContent = `${c2Val.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('cmp-val-cyp').textContent = `${cypVal.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('cmp-val-c29a').textContent = `${c29aVal.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('cmp-val-maeklong').textContent = `${getStationValue('maeklong_dam').toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('cmp-val-kgt3').textContent = `${getStationValue('bangpakong_gate').toLocaleString()} ลบ.ม./วิ`;
+
+      // 4. Update Indicator Bars
+      updatePillColor('barC2', c2Val, hydroData.c2.critical);
+      updatePillColor('barCYP', cypVal, hydroData.cyp_dam.critical);
+      updatePillColor('barC29A', c29aVal, hydroData.c29a.critical);
+    }
+
+    function updatePillColor(elementId, val, critical) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      if (val >= critical) {
+        el.className = 'w-2 sm:w-2.5 h-8 sm:h-10 bg-rose-500 rounded-full shadow-sm shadow-rose-500/50 animate-pulse';
+      } else if (val >= critical * 0.68) {
+        el.className = 'w-2 sm:w-2.5 h-8 sm:h-10 bg-amber-500 rounded-full shadow-sm shadow-amber-500/50';
+      } else {
+        el.className = 'w-2 sm:w-2.5 h-8 sm:h-10 bg-emerald-500 rounded-full shadow-sm shadow-emerald-500/50';
+      }
+    }
+
+    function setSpeed(duration, btnElement) {
+      currentFlowDuration = duration;
+      document.documentElement.style.setProperty('--flow-duration', `${duration}s`);
+
+      const container = btnElement.parentElement;
+      container.querySelectorAll('button').forEach(b => {
+        b.className = 'px-2 py-0.5 rounded text-slate-300 hover:text-white';
+      });
+      btnElement.className = 'px-2 py-0.5 rounded bg-sky-600 text-white font-bold';
+    }
+
+    function toggleSurgeSimulation() {
+      isSurgeActive = !isSurgeActive;
+      const surgeBtn = document.getElementById('surgeBtn');
+      const surgeBtnText = document.getElementById('surgeBtnText');
+
+      if (isSurgeActive) {
+        surgeBtn.classList.remove('bg-rose-950', 'text-rose-200', 'border-rose-500/60');
+        surgeBtn.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse');
+        surgeBtnText.textContent = '⛔ ปิดน้ำหลาก!';
+        setSpeed(0.7, document.getElementById('btnSpeed3'));
+      } else {
+        surgeBtn.classList.remove('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse');
+        surgeBtn.classList.add('bg-rose-950', 'text-rose-200', 'border-rose-500/60');
+        surgeBtnText.textContent = '⚠️ จำลองน้ำหลาก';
+        setSpeed(1.4, document.getElementById('btnSpeed2'));
+      }
+
+      updateAllDisplays();
+    }
+
+    function openNodeModal(nodeKey) {
+      if (nodeKey === 'gulf') {
+        openGulfModal();
+        return;
+      }
+
+      const data = hydroData[nodeKey];
+      if (!data) return;
+
+      const modal = document.getElementById('nodeModal');
+      const modalBox = document.getElementById('modalBox');
+
+      document.getElementById('modalTitle').textContent = data.name;
+      document.getElementById('modalLocation').textContent = data.location;
+
+      const curFlow = getStationValue(nodeKey);
+      document.getElementById('modalFlowVal').textContent = curFlow.toLocaleString();
+      document.getElementById('modalStorageVal').textContent = data.storage ? `${data.storage}%` : '-';
+      document.getElementById('modalStorageCap').textContent = data.storage ? `กักเก็บปัจจุบัน (จากความจุ 100%)` : `สถานีตรวจวัดอัตราการไหล`;
+
+      document.getElementById('modalStat54').textContent = `${data.y2554.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('modalStat65').textContent = `${data.y2565.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('modalCritical').textContent = `${data.critical.toLocaleString()} ลบ.ม./วิ`;
+      document.getElementById('modalNoteText').textContent = data.note;
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modalBox.classList.remove('scale-95');
+        modalBox.classList.add('scale-100');
+      }, 10);
+    }
+
+    function closeNodeModal() {
+      const modal = document.getElementById('nodeModal');
+      const modalBox = document.getElementById('modalBox');
+
+      modal.classList.add('opacity-0');
+      modalBox.classList.remove('scale-100');
+      modalBox.classList.add('scale-95');
+
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 200);
+    }
+
+    // Gulf Modal Handlers
+    function openGulfModal() {
+      const modal = document.getElementById('gulfModal');
+      const modalBox = document.getElementById('gulfModalBox');
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modalBox.classList.remove('scale-95');
+        modalBox.classList.add('scale-100');
+      }, 10);
+    }
+
+    function closeGulfModal() {
+      const modal = document.getElementById('gulfModal');
+      const modalBox = document.getElementById('gulfModalBox');
+
+      modal.classList.add('opacity-0');
+      modalBox.classList.remove('scale-100');
+      modalBox.classList.add('scale-95');
+
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 200);
+    }
+
+    function toggleConfigModal() {
+      document.getElementById('configModal').classList.toggle('hidden');
+    }
+
+    function saveAndApplyApiConfig() {
+      toggleConfigModal();
+      updateAllDisplays();
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeNodeModal();
+        closeGulfModal();
+        document.getElementById('configModal').classList.add('hidden');
+      }
+    });
+
+    document.getElementById('nodeModal').addEventListener('click', (e) => {
+      if (e.target.id === 'nodeModal') closeNodeModal();
+    });
+
+    document.getElementById('gulfModal').addEventListener('click', (e) => {
+      if (e.target.id === 'gulfModal') closeGulfModal();
+    });
+
+    // === การเชื่อมต่อ SUPABASE LIVE DATA ===
     const SUPABASE_PROJECT_URL = "https://ycchozbszqxxmvxwdlag.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_3e9DGRangFpRoHF12rgyVA_LlGCB2Oc";
 
-    const STATION_REGISTRY = {
-      'C2': { warningFlow: 2800, streamId: 'stream-c2', mockValue: 1904 },
-      'C13': { warningFlow: 2000, streamId: 'stream-c13', mockValue: 2200 },
-      'C29A': { warningFlow: 2500, streamId: 'stream-c29a', mockValue: 2250 },
-      'pasak': { warningFlow: 400, streamId: null, mockValue: 115 },
-      'rama6': { warningFlow: 500, streamId: 'stream-rama6', mockValue: 410 },
-      'srinagarind': { warningFlow: 800, streamId: null, mockValue: 180 },
-      'maeklong_dam': { warningFlow: 1200, streamId: 'stream-maeklong-dam', mockValue: 3000 },
-      'khundan': { warningFlow: 150, streamId: 'stream-bangpakong-dam', mockValue: 50 }
+    const supabaseClient = supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY);
+
+    const STATION_ID_MAP = {
+      'C2': 'c2',
+      'C13': 'cyp_dam',
+      'C29A': 'c29a',
+      'pasak': 'pasak_dam',
+      'rama6': 'rama6_dam',
+      'srinagarind': 'srinagarind',
+      'maeklong_dam': 'maeklong_dam',
+      'khundan': 'khundan',
+      'bangpakong_gate': 'bangpakong_gate'
     };
 
-    /**
-     * ดึงข้อมูลจริงจาก Supabase
-     */
-    async function fetchLiveThaiWaterData() {
-      const spinner = document.getElementById('apiSpinner');
-      const tag = document.getElementById('dataSourceTag');
-      if (spinner) spinner.classList.remove('hidden');
-
+    async function fetchSupabaseLiveWater() {
       try {
-        const response = await fetch(`${SUPABASE_PROJECT_URL}/rest/v1/water_stations?select=*`, {
-          method: 'GET',
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const { data, error } = await supabaseClient
+          .from('water_stations')
+          .select('*');
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ไม่สามารถดึงข้อมูลได้`);
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          data.forEach(station => {
+            const localKey = STATION_ID_MAP[station.station_id] || station.station_id.toLowerCase();
+            if (hydroData[localKey]) {
+              hydroData[localKey].current = station.discharge_m3s;
+            }
+          });
+          // อัปเดตการแสดงผลบนหน้าจอทันที
+          updateAllDisplays();
+          console.log("✅ ซิงค์ข้อมูลสดจาก Supabase สำเร็จ");
         }
-
-        const data = await response.json();
-        console.log("✅ ข้อมูลสดจาก Supabase สำเร็จ:", data);
-
-        let totalInflow = 0;
-
-        data.forEach(item => {
-          const sId = item.station_id;
-          const discharge = Number(item.discharge_m3s) || 0;
-          const reg = STATION_REGISTRY[sId] || {};
-          const warnFlow = Number(item.warning_flow) || reg.warningFlow || 2000;
-          const streamId = reg.streamId || null;
-
-          if (['C29A', 'maeklong_dam', 'bangpakong_gate'].includes(sId)) {
-            totalInflow += discharge;
-          }
-
-          updateNodeUI(sId, discharge, warnFlow, streamId);
-        });
-
-        const totalElem = document.getElementById('totalGulfDischarge');
-        if (totalElem) {
-          totalElem.textContent = totalInflow.toLocaleString() + ' ลบ.ม./วิ';
-        }
-
-        if (tag) {
-          tag.textContent = 'Supabase Live Connected (ข้อมูลสด)';
-          tag.className = 'text-emerald-400 font-bold';
-        }
-
-        const lastUpdatedElem = document.getElementById('lastUpdated');
-        if (lastUpdatedElem) {
-          lastUpdatedElem.textContent = new Date().toLocaleTimeString('th-TH');
-        }
-
-      } catch (error) {
-        console.warn("⚠️ เชื่อมต่อ Supabase ล้มเหลว กำลังใช้ข้อมูลจำลอง:", error);
-        if (tag) {
-          tag.textContent = 'Mock Fallback (ออฟไลน์)';
-          tag.className = 'text-amber-400 font-bold';
-        }
-        // รัน Fallback จำลองข้อมูล
-        Object.entries(STATION_REGISTRY).forEach(([sId, station]) => {
-          updateNodeUI(sId, station.mockValue, station.warningFlow, station.streamId);
-        });
-      } finally {
-        if (spinner) spinner.classList.add('hidden');
+      } catch (err) {
+        console.warn("⚠️ ใช้ข้อมูลสำรอง (ยังไม่สามารถดึง Supabase ได้):", err);
       }
     }
 
-    /**
-     * อัปเดตตัวเลข สี และความเร็ว Animation น้ำไหล
-     */
-    function updateNodeUI(nodeId, discharge, warningLevel, streamId) {
-      const nodeCard = document.getElementById(`node-${nodeId}`);
-      if (!nodeCard) return;
+    // Start on load
+    window.onload = function () {
+      updateAllDisplays();
+      setSpeed(1.4, document.getElementById('btnSpeed2'));
 
-      const valEl = nodeCard.querySelector('.flow-val');
-      if (valEl) {
-        valEl.innerHTML = `${discharge.toLocaleString()} <span class="text-xs font-normal">ลบ.ม./วิ</span>`;
+      // If mobile, automatically auto-zoom slightly on Chao Phraya for instant legibility
+      if (window.innerWidth < 640) {
+        selectBasin('chao_phraya');
       }
 
-      // ปรับระดับสีเตือนภัย
-      nodeCard.classList.remove('border-slate-700', 'border-amber-500', 'border-rose-500', 'bg-rose-950/20', 'bg-amber-950/20');
-      if (discharge >= warningLevel) {
-        if (valEl) valEl.className = 'text-xl font-black text-rose-500 mt-0.5 flow-val';
-        nodeCard.classList.add('border-rose-500', 'bg-rose-950/20');
-      } else if (discharge >= warningLevel * 0.8) {
-        if (valEl) valEl.className = 'text-xl font-black text-amber-400 mt-0.5 flow-val';
-        nodeCard.classList.add('border-amber-500', 'bg-amber-950/20');
-      } else {
-        if (valEl) valEl.className = 'text-xl font-black text-emerald-400 mt-0.5 flow-val';
-        nodeCard.classList.add('border-slate-700');
-      }
-
-      // ปรับความเร็ว Animation ตามความแรงของน้ำ
-      if (streamId) {
-        const streamEl = document.getElementById(streamId);
-        if (streamEl) {
-          const duration = Math.max(0.3, Math.min(2.5, 4000 / discharge));
-          streamEl.style.animationDuration = `${duration.toFixed(2)}s`;
-        }
-      }
-    }
-
-    /**
-     * ฟังก์ชัน Filter สายน้ำ
-     */
-    function setBasin(basin) {
-      document.querySelectorAll('.basin-btn').forEach(btn => {
-        btn.classList.remove('bg-sky-600', 'text-white');
-        btn.classList.add('text-slate-300');
-      });
-      document.getElementById(`btn-${basin}`).classList.add('bg-sky-600', 'text-white');
-
-      const cols = {
-        'chao_phraya': ['col-chao_phraya', 'path-chao_phraya'],
-        'mae_klong': ['col-mae_klong', 'path-mae_klong'],
-        'bang_pakong': ['col-bang_pakong', 'path-bang_pakong']
-      };
-
-      if (basin === 'all') {
-        Object.values(cols).forEach(([colId, pathId]) => {
-          document.getElementById(colId).classList.remove('fade-out');
-          document.getElementById(pathId).classList.remove('fade-out');
-          document.getElementById(colId).classList.add('fade-in');
-          document.getElementById(pathId).classList.add('fade-in');
-        });
-      } else {
-        Object.entries(cols).forEach(([bName, [colId, pathId]]) => {
-          const colEl = document.getElementById(colId);
-          const pathEl = document.getElementById(pathId);
-          if (bName === basin) {
-            colEl.classList.remove('fade-out');
-            pathEl.classList.remove('fade-out');
-            colEl.classList.add('fade-in');
-            pathEl.classList.add('fade-in');
-          } else {
-            colEl.classList.remove('fade-in');
-            pathEl.classList.remove('fade-in');
-            colEl.classList.add('fade-out');
-            pathEl.classList.add('fade-out');
-          }
-        });
-      }
-    }
-
-    // เริ่มต้นระบบทันทีที่โหลดหน้าเว็บเสร็จ
-    window.addEventListener('DOMContentLoaded', () => {
-      fetchLiveThaiWaterData();
-    });
+      // เรียกดึงข้อมูลทันทีเมื่อเปิดหน้าเว็บ
+      fetchSupabaseLiveWater();
+    };
   </script>
 </body>
+
 </html>
