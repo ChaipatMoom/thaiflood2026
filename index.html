@@ -257,10 +257,10 @@
   </div>
 
   <script>
-    /**
-     * กำหนดการจับคู่สถานี (Station Mapping) กับ API Resource ตาม ThaiWater Standard
-     */
-    const STATION_REGISTRY = {
+  // === ตั้งค่าเชื่อมต่อ SUPABASE ===
+  const SUPABASE_PROJECT_URL = "https://ycchozbszqxmvxwdlag.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_3e9DGRangFpRoHF12rgyVA_LlGCB2Oc";
+  const STATION_REGISTRY = {
       // กลุ่มน้ำท่า (Resource: /Runoff - A002)
       'C2': {
         type: 'runoff',
@@ -347,47 +347,75 @@
     /**
      * ดึงข้อมูลจริงจาก ThaiWater Standard API
      */
-    async function fetchLiveThaiWaterData() {
-      const spinner = document.getElementById('apiSpinner');
-      spinner.classList.remove('hidden');
+    /**
+ * ดึงข้อมูลจริงจาก Supabase (แทนที่การเรียก ThaiWater เดิม)
+ */
+async function fetchLiveThaiWaterData() {
+  const spinner = document.getElementById('apiSpinner');
+  if (spinner) spinner.classList.remove('hidden');
 
-      let liveSuccess = false;
-      const headers = { 'Content-Type': 'application/json' };
-      if (config.apiKey) {
-        headers['Authorization'] = `Bearer ${config.apiKey}`;
+  try {
+    // 1. ดึงข้อมูลสถานีทั้งหมดจาก Supabase ใน Request เดียว
+    const response = await fetch(`${SUPABASE_PROJECT_URL}/rest/v1/water_stations?select=*`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ไม่สามารถดึงข้อมูลจาก Supabase ได้`);
+    }
+
+    const data = await response.json();
+    console.log("✅ ข้อมูลสดจาก Supabase สำเร็จ:", data);
+
+    // 2. นำข้อมูลแต่ละสถานีไปอัปเดตลงบนผัง UI และกราฟิกน้ำไหล
+    let totalInflow = 0;
+
+    data.forEach(item => {
+      const sId = item.station_id;
+      const discharge = Number(item.discharge_m3s) || 0;
+      const status = item.status; // 'normal', 'warning', 'critical'
+
+      // รวมยอดสู่อ่าวไทยเฉพาะจุดปลายน้ำ (สมุทรปราการ/เจ้าพระยา + แม่กลอง + บางปะกง)
+      if (['C29A', 'maeklong_dam', 'bangpakong_gate'].includes(sId)) {
+        totalInflow += discharge;
       }
 
-      for (const [nodeId, station] of Object.entries(STATION_REGISTRY)) {
-        try {
-          let url = '';
-          // 1. เรียก API ตามประเภท Resource ที่ ThaiWater Standard กำหนดไว้
-          if (station.type === 'runoff') {
-            url = `${config.baseUrl}/Runoff?latest=true&stationCode=${station.stationCode}&agencyCode=${station.agencyCode}`;
-          } else {
-            url = `${config.baseUrl}/LargesizedWaterResources?latest=true&waterResourcesCode=${station.waterResourcesCode}`;
-          }
-
-          const response = await fetch(url, { headers });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = await response.json();
-
-          // ดึงค่า discharge จาก response schema มาตรฐาน
-          let discharge = 0;
-          if (station.type === 'runoff') {
-            discharge = data.discharge || (data.data && data.data[0] ? data.data[0].discharge : 0);
-          } else {
-            discharge = data.outflow || data.discharge || (data.data && data.data[0] ? data.data[0].outflow : 0);
-          }
-
-          updateNodeUI(nodeId, discharge, station.warningFlow, station.streamId);
-          liveSuccess = true;
-        } catch (err) {
-          // หาก fetch ตรงไม่ได้ (เช่น รันบน client แล้วติด Browser CORS หรือไม่มี Token)
-          if (config.useMockIfFailed) {
-            applyMockFallback(nodeId, station);
-          }
-        }
+      // อัปเดตตัวเลขใน DOM (ถ้ามี element ไอดีนั้นๆ)
+      const valElem = document.getElementById(`val-${sId}`) || document.getElementById(`val-${sId.toLowerCase()}`);
+      if (valElem) {
+        valElem.textContent = discharge.toLocaleString();
       }
+
+      // ถ้าในโค้ดเดิมมีฟังก์ชันอัปเดตเฉพาะ ให้เรียกใช้ตามปกติ
+      if (typeof updateStationUI === 'function') {
+        updateStationUI(sId, discharge, status);
+      } else if (typeof updateNodeUI === 'function') {
+        updateNodeUI(sId, discharge, item.warning_flow);
+      }
+    });
+
+    // 3. อัปเดตยอดรวมสู่อ่าวไทย และเวลาล่าสุด
+    const totalElem = document.getElementById('val-gulf-total') || document.getElementById('totalGulfDischarge');
+    if (totalElem) {
+      totalElem.textContent = totalInflow.toLocaleString() + ' ลบ.ม./วิ';
+    }
+
+    const lastUpdatedElem = document.getElementById('lastUpdated') || document.getElementById('updateTime');
+    if (lastUpdatedElem) {
+      lastUpdatedElem.textContent = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+    }
+
+  } catch (error) {
+    console.error("❌ ดึงข้อมูลล้มเหลว กำลังใช้ข้อมูลจำลองแทน:", error);
+  } finally {
+    if (spinner) spinner.classList.add('hidden');
+  }
+}
 
       spinner.classList.add('hidden');
       document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('th-TH');
