@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
 
 if sys.platform == "win32":
@@ -12,7 +12,7 @@ if sys.platform == "win32":
         pass
 
 # ==============================================================================
-# 1. ตั้งค่าการเชื่อมต่อ Supabase
+# 1. การตั้งค่าการเชื่อมต่อ Supabase
 # ==============================================================================
 SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -22,7 +22,7 @@ if not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ผัง 10 สถานี เกณฑ์เตือนภัย (ลบ.ม./วิ) และค่าสำรอง (Fallback)
+# ผัง 10 สถานียุทธศาสตร์ เกณฑ์เตือนภัย (ลบ.ม./วิ) และค่าสำรอง (Fallback)
 STATIONS_CONFIG = {
     # ลุ่มน้ำเจ้าพระยา (HII TIWRM)
     "C2": {"name": "แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)", "basin": "chao_phraya", "warning": 2000, "critical": 2800, "default": 1904},
@@ -31,18 +31,18 @@ STATIONS_CONFIG = {
     "rama6": {"name": "เขื่อนพระรามหก (แม่น้ำป่าสัก)", "basin": "chao_phraya", "warning": 500, "critical": 700, "default": 410},
     "C29A": {"name": "สถานี C.29A บางไทร (อยุธยา)", "basin": "chao_phraya", "warning": 2500, "critical": 3000, "default": 2250},
 
-    # ลุ่มน้ำแม่กลอง (HII EGAT / MK Monitor)
+    # ลุ่มน้ำแม่กลอง (HII EGAT & MK Monitor API)
     "srinagarind": {"name": "เขื่อนศรีนครินทร์ (กาญจนบุรี)", "basin": "mae_klong", "warning": 400, "critical": 600, "default": 180},
     "vajiralongkorn": {"name": "เขื่อนวชิราลงกรณ (กาญจนบุรี)", "basin": "mae_klong", "warning": 300, "critical": 500, "default": 120},
     "maeklong_dam": {"name": "เขื่อนแม่กลอง (K.10 ท่าม่วง)", "basin": "mae_klong", "warning": 1200, "critical": 2000, "default": 1000},
 
-    # ลุ่มน้ำบางปะกง (HII RID Dam)
+    # ลุ่มน้ำบางปะกง (HII RID / Fallback)
     "khundan": {"name": "เขื่อนขุนด่านปราการชล", "basin": "bang_pakong", "warning": 100, "critical": 200, "default": 50},
     "bangpakong_gate": {"name": "ปตร. แม่น้ำบางปะกง", "basin": "bang_pakong", "warning": 400, "critical": 600, "default": 310}
 }
 
 def fetch_html_auto_encoding(url, timeout=15):
-    """ฟังก์ชันกลางสำหรับดึงหน้าเว็บและตรวจจับภาษาไทยให้อ่านออก 100%"""
+    """ฟังก์ชันกลางดึงหน้าเว็บพร้อมตรวจจับรหัสภาษาไทย"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Referer": "https://tiwrm.hii.or.th/"
@@ -63,7 +63,7 @@ def fetch_html_auto_encoding(url, timeout=15):
     return ""
 
 # ==============================================================================
-# 2. ดึงสถานีลุ่มน้ำเจ้าพระยา (C.2, C.13, C.29A, พระรามหก)
+# 2. ดึงสถานีลุ่มน้ำเจ้าพระยา (C.2, C.13, C.29A, พระรามหก, ป่าสัก)
 # ==============================================================================
 def scrape_hii_chaopraya():
     url = "https://tiwrm.hii.or.th/DATA/REPORT/php/chart/chaopraya/2013/chaopraya.php"
@@ -92,19 +92,12 @@ def scrape_hii_chaopraya():
     return hii_results
 
 # ==============================================================================
-# 3. ดึงเขื่อนขนาดใหญ่ (กฟผ. และ ชลประทาน)
+# 3. ดึงเขื่อนขนาดใหญ่ กฟผ. (ศรีนครินทร์, วชิราลงกรณ)
 # ==============================================================================
 def fetch_all_dams():
-    """
-    ดึงข้อมูลการระบายน้ำรายเขื่อน (กฟผ. และ กรมชลประทาน) จาก HII TIWRM
-    แก้ไขปัญหาการจับชนแถว 'รวม' และรองรับ HTML ที่ไม่มี </tr> ปิดแถว
-    """
     dam_results = {}
-
-    # --------------------------------------------------------------------------
-    # 3.1 เขื่อน กฟผ. (ศรีนครินทร์, วชิราลงกรณ) จาก egat_dam.php
-    # --------------------------------------------------------------------------
     egat_html = fetch_html_auto_encoding("https://tiwrm.hii.or.th/DATA/REPORT/php/egat_dam.php")
+
     if egat_html:
         print("📡 [HII EGAT Dams] เชื่อมต่อสำเร็จ")
         egat_targets = {
@@ -112,55 +105,12 @@ def fetch_all_dams():
             "วชิราลงกรณ": {"sid": "vajiralongkorn", "max_mld": 55.0}
         }
 
-        # แยกแถวด้วย <tr เพื่อไม่ให้พึ่งพาแท็ก </tr> ที่ปิดไม่สมบูรณ์ในตารางเว็บราชการ
         chunks = re.split(r"<tr[^>]*>", egat_html, flags=re.IGNORECASE)
         for chunk in chunks:
-            # ข้ามแถวหัวตารางและแถวสรุปยอดรวม (Total) ท้ายตาราง
             if "รวม" in chunk or "เฉลี่ย" in chunk:
                 continue
 
             for name, conf in egat_targets.items():
-                sid = conf["sid"]
-                if name in chunk and sid not in dam_results:
-                    clean_text = re.sub(r"<[^>]+>", " ", chunk)
-                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", clean_text)]
-
-                    # กรองตัวเลขระบายน้ำรายวัน (ปกติ 0.0 - 45.0 ล้าน ลบ.ม./วัน)
-                    valid = [n for n in nums if 0.0 <= n <= conf["max_mld"]]
-                    if valid:
-                        mld = valid[-1]  # คอลัมน์ระบายน้ำมักอยู่ท้ายสุดของแถว
-                        m3s = round((mld * 1_000_000) / 86400)
-                        dam_results[sid] = m3s
-                        print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
-
-    # --------------------------------------------------------------------------
-    # 3.2 เขื่อน กรมชลประทาน (ป่าสักฯ, ขุนด่านฯ)
-    # --------------------------------------------------------------------------
-    rid_urls = [
-        "https://tiwrm.hii.or.th/DATA/REPORT/php/rid_bigdam.php",
-        "https://tiwrm.hii.or.th/DATA/REPORT/php/rid_dam.php",
-        "https://tiwrm.hii.or.th/DATA/REPORT/php/dam_rid.php"
-    ]
-
-    rid_html = ""
-    for u in rid_urls:
-        content = fetch_html_auto_encoding(u)
-        if content and any(k in content for k in ["ป่าสัก", "ขุนด่าน"]):
-            rid_html = content
-            print(f"📡 [HII RID Dams] เชื่อมต่อสำเร็จ ({u.split('/')[-1]})")
-            break
-
-    if rid_html:
-        rid_targets = {
-            "ป่าสัก": {"sid": "pasak", "max_mld": 35.0},
-            "ขุนด่าน": {"sid": "khundan", "max_mld": 20.0}
-        }
-        chunks = re.split(r"<tr[^>]*>", rid_html, flags=re.IGNORECASE)
-        for chunk in chunks:
-            if "รวม" in chunk or "เฉลี่ย" in chunk:
-                continue
-
-            for name, conf in rid_targets.items():
                 sid = conf["sid"]
                 if name in chunk and sid not in dam_results:
                     clean_text = re.sub(r"<[^>]+>", " ", chunk)
@@ -171,63 +121,76 @@ def fetch_all_dams():
                         m3s = round((mld * 1_000_000) / 86400)
                         dam_results[sid] = m3s
                         print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
-    else:
-        print("ℹ️ [HII RID Dams] ใช้ค่าระบายน้ำป่าสักจากผังเจ้าพระยา หรือค่าสำรอง")
 
     return dam_results
 
 # ==============================================================================
-# 4. ดึงเขื่อนแม่กลอง (K.10) จาก MK Monitor
+# 4. ดึงเขื่อนแม่กลองจาก API ตรง (POST: http://mkmonitor.ddns.net/api/v1/wf02)
 # ==============================================================================
 def scrape_maeklong_monitor():
-    url = "http://mkmonitor.ddns.net/"
+    url = "http://mkmonitor.ddns.net/api/v1/wf02"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+        "Origin": "http://mkmonitor.ddns.net",
+        "Referer": "http://mkmonitor.ddns.net/waterflow"
+    }
+
+    # แปลงเวลาเป็น UTC+7 (เวลาประเทศไทย)
+    tz_th = timezone(timedelta(hours=7))
+    now_th = datetime.now(tz_th)
+    
+    payload = {
+        "start": now_th.strftime("%Y-%m-%d 00:00"),
+        "end": now_th.strftime("%Y-%m-%d %H:%M"),
+        "format": "3600",
+        "site_id": 2
     }
 
     mk_results = {}
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        print(f"📡 [MK Monitor DDNS] HTTP Status: {resp.status_code}")
+        resp = requests.post(url, headers=headers, json=payload, timeout=12)
+        print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
         if resp.status_code == 200:
-            html = resp.content.decode("tis-620", errors="ignore")
-            if "แม่กลอง" not in html and "K.10" not in html:
-                html = resp.content.decode("utf-8", errors="ignore")
+            data = resp.json()
+            records = data if isinstance(data, list) else data.get("data", [])
 
-            # 1. ตัดโค้ดสไตล์ CSS, Script และ Comments ออกเด็ดขาด
-            clean_html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
-            clean_html = re.sub(r"<style[^>]*>.*?</style>", "", clean_html, flags=re.DOTALL | re.IGNORECASE)
-            clean_html = re.sub(r"<!--.*?-->", "", clean_html, flags=re.DOTALL)
-            clean_html = re.sub(r"/\*.*?\*/", "", clean_html, flags=re.DOTALL)
+            if records:
+                # ดึงเรคคอร์ดล่าสุดของวันนี้
+                latest = records[-1]
+                
+                # ตรวจหาค่าอัตราการไหล (รองรับโครงสร้าง key หลายรูปแบบ)
+                flow_val = None
+                for k in ["discharge", "waterflow", "flow", "val", "value", "q"]:
+                    if k in latest:
+                        flow_val = latest[k]
+                        break
 
-            # 2. ค้นหาข้อมูลเฉพาะภายในแท็กตาราง <table> เท่านั้น
-            tables = re.findall(r"<table[^>]*>.*?</table>", clean_html, re.DOTALL | re.IGNORECASE)
-            search_text = "".join(tables) if tables else clean_html
+                if flow_val is None:
+                    # หากไม่มีชื่อ key ตามที่ระบุ ให้หยิบตัวเลขตัวสุดท้ายใน object
+                    for v in reversed(list(latest.values())):
+                        try:
+                            flow_val = float(v)
+                            break
+                        except (ValueError, TypeError):
+                            pass
 
-            # แปลงเป็นข้อความล้วน
-            text_only = re.sub(r"<[^>]+>", " ", search_text)
-            clean_text = " ".join(text_only.split())
-
-            # 3. ค้นหาขอบเขตตัวเลขรอบคำว่า แม่กลอง หรือ K.10
-            match_area = re.search(r"(?:แม่กลอง|K\.?10).{0,150}", clean_text, re.IGNORECASE)
-            if match_area:
-                snippet = match_area.group(0)
-                print(f"   🔍 [MK Target Snippet]: {snippet}")
-                nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", snippet)]
-                valid = [n for n in nums if 50.0 <= n <= 3500.0]
-                if valid:
-                    mk_results["maeklong_dam"] = round(valid[0])
-                    print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
+                if flow_val is not None:
+                    val = float(flow_val)
+                    if val > 0:
+                        mk_results["maeklong_dam"] = round(val)
+                        print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
             else:
-                print("   ⚠️ ไม่พบข้อมูลเขื่อนแม่กลองภายในตาราง")
+                print("   ⚠️ [MK Monitor API] ได้รับข้อมูลเป็นลิสต์ว่าง")
     except Exception as e:
-        print(f"⚠️ ดึงข้อมูลจาก mkmonitor.ddns.net ขัดข้อง: {e}")
+        print(f"⚠️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
 
     return mk_results
 
 # ==============================================================================
-# 5. รวมและอัปเดตลง Supabase
+# 5. รวบรวมข้อมูลและ Upsert ลง Supabase
 # ==============================================================================
 def sync_water_data():
     print(f"\n=======================================================")
@@ -244,7 +207,7 @@ def sync_water_data():
     for sid, conf in STATIONS_CONFIG.items():
         flow_value = conf["default"]
 
-        # จัดลำดับข้อมูลจริง
+        # จัดลำดับข้อมูลจริงก่อนเสมอ
         if sid in mk_data:
             flow_value = mk_data[sid]
         elif sid in flow_data:
@@ -252,7 +215,7 @@ def sync_water_data():
         elif sid in dam_data:
             flow_value = dam_data[sid]
 
-        # ประเมินสถานะเตือนภัย
+        # คำนวณสถานะเกณฑ์เตือนภัย
         if flow_value >= conf["critical"]:
             status = "critical"
         elif flow_value >= conf["warning"]:
