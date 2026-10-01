@@ -137,7 +137,6 @@ def scrape_maeklong_monitor():
         "Referer": "http://mkmonitor.ddns.net/waterflow"
     }
 
-    # แปลงเวลาเป็น UTC+7 (เวลาประเทศไทย)
     tz_th = timezone(timedelta(hours=7))
     now_th = datetime.now(tz_th)
     
@@ -158,10 +157,7 @@ def scrape_maeklong_monitor():
             records = data if isinstance(data, list) else data.get("data", [])
 
             if records:
-                # ดึงเรคคอร์ดล่าสุดของวันนี้
                 latest = records[-1]
-                
-                # ตรวจหาค่าอัตราการไหล (รองรับโครงสร้าง key หลายรูปแบบ)
                 flow_val = None
                 for k in ["discharge", "waterflow", "flow", "val", "value", "q"]:
                     if k in latest:
@@ -169,7 +165,6 @@ def scrape_maeklong_monitor():
                         break
 
                 if flow_val is None:
-                    # หากไม่มีชื่อ key ตามที่ระบุ ให้หยิบตัวเลขตัวสุดท้ายใน object
                     for v in reversed(list(latest.values())):
                         try:
                             flow_val = float(v)
