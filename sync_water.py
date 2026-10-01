@@ -130,7 +130,7 @@ def fetch_all_dams():
 def scrape_maeklong_monitor():
     base_page = "http://mkmonitor.ddns.net/waterflow"
     api_url = "http://mkmonitor.ddns.net/api/v1/wf02"
-    
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -139,10 +139,10 @@ def scrape_maeklong_monitor():
         "Referer": base_page
     }
 
-    # เวลาปัจจุบันของประเทศไทย (UTC+7)
+    # เวลาปัจจุบันประเทศไทย (UTC+7)
     tz_th = timezone(timedelta(hours=7))
     now_th = datetime.now(tz_th)
-    
+
     payload = {
         "start": now_th.strftime("%Y-%m-%d 00:00"),
         "end": now_th.strftime("%Y-%m-%d %H:%M"),
@@ -154,51 +154,54 @@ def scrape_maeklong_monitor():
     session = requests.Session()
 
     try:
-        # 1. แวะดึงหน้าเว็บหลักก่อน เพื่อให้ Session เก็บ Cookie 'makelong'
+        # 1. แวะเก็บ Cookie session
         session.get(base_page, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
 
-        # 2. ยิงคำขอ POST พร้อม Cookie ที่ได้มาอัตโนมัติ
+        # 2. ยิง Request ดึงตัวเลข
         resp = session.post(api_url, headers=headers, json=payload, timeout=12)
         print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
         if resp.status_code == 200:
-            print(f"🔍 [MK Monitor Raw JSON]: {resp.text[:300]}")
             data = resp.json()
+            charts = data.get("charts", {}) if isinstance(data, dict) else {}
+            print(f"🔍 [MK Monitor Charts Keys]: {list(charts.keys()) if isinstance(charts, dict) else 'Not a dict'}")
 
-            # สกัดหาข้อมูลที่เป็น List จากทุกรูปแบบโครงสร้าง
-            records = []
-            if isinstance(data, list):
-                records = data
-            elif isinstance(data, dict):
-                for val in data.values():
-                    if isinstance(val, list) and len(val) > 0:
-                        records = val
+            # สกัดหาอาเรย์ตัวเลขจาก charts (data, datasets, หรือคีย์ตัวเลข)
+            flow_series = []
+
+            # กรณีที่ 1: charts["data"]
+            if "data" in charts and isinstance(charts["data"], list):
+                flow_series = charts["data"]
+            # กรณีที่ 2: charts["datasets"][0]["data"]
+            elif "datasets" in charts and isinstance(charts["datasets"], list) and len(charts["datasets"]) > 0:
+                first_ds = charts["datasets"][0]
+                if isinstance(first_ds, dict) and "data" in first_ds:
+                    flow_series = first_ds["data"]
+            # กรณีที่ 3: วนหาอาร์เรย์ที่มีตัวเลขทั้งหมดที่ไม่ใช่ label
+            elif isinstance(charts, dict):
+                for k, v in charts.items():
+                    if k not in ["label", "labels"] and isinstance(v, list) and len(v) > 0:
+                        flow_series = v
                         break
 
-            if records:
-                # ตรวจหาตัวเลขอัตราการไหล (100 - 4,000 ลบ.ม./วิ) ในเรคคอร์ดล่าสุด
-                latest = records[-1]
-                flow_val = None
+            # ดึงค่าตัวเลขล่าสุดในชุดข้อมูล (คัดกรองเฉพาะตัวเลขจริง)
+            valid_numbers = []
+            for item in flow_series:
+                try:
+                    val = float(item.get("y") if isinstance(item, dict) else item)
+                    valid_numbers.append(val)
+                except (ValueError, TypeError):
+                    pass
 
-                if isinstance(latest, dict):
-                    for v in reversed(list(latest.values())):
-                        try:
-                            f = float(v)
-                            if 100.0 <= f <= 4000.0:
-                                flow_val = f
-                                break
-                        except (ValueError, TypeError):
-                            pass
-                elif isinstance(latest, (int, float)):
-                    flow_val = float(latest)
-
-                if flow_val is not None:
-                    mk_results["maeklong_dam"] = round(flow_val)
-                    print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
+            if valid_numbers:
+                # ดึงตัวเลขชั่วโมงล่าสุด
+                latest_flow = valid_numbers[-1]
+                mk_results["maeklong_dam"] = round(latest_flow)
+                print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
             else:
-                print("   ⚠️ [MK Monitor API] ไม่พบอาร์เรย์ข้อมูลใน Response")
+                print("   ⚠️️ [MK Monitor API] ไม่พบตัวเลขระบายน้ำในอ็อบเจกต์ charts")
     except Exception as e:
-        print(f"⚠️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
+        print(f"⚠️️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
 
     return mk_results
 
