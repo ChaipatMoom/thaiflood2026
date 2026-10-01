@@ -12,7 +12,7 @@ if sys.platform == "win32":
         pass
 
 # ==============================================================================
-# 1. การตั้งค่าการเชื่อมต่อ Supabase
+# 1. การตั้งค่าการเชื่อมต่อฐานข้อมูล Supabase
 # ==============================================================================
 SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -22,7 +22,7 @@ if not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ผัง 10 สถานียุทธศาสตร์ เกณฑ์เตือนภัย (ลบ.ม./วิ) และค่าสำรอง (Fallback)
+# 10 สถานียุทธศาสตร์หลัก เกณฑ์เตือนภัย (ลบ.ม./วิ) และค่าสำรอง (Fallback)
 STATIONS_CONFIG = {
     # ลุ่มน้ำเจ้าพระยา (HII TIWRM)
     "C2": {"name": "แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)", "basin": "chao_phraya", "warning": 2000, "critical": 2800, "default": 1904},
@@ -36,13 +36,13 @@ STATIONS_CONFIG = {
     "vajiralongkorn": {"name": "เขื่อนวชิราลงกรณ (กาญจนบุรี)", "basin": "mae_klong", "warning": 300, "critical": 500, "default": 120},
     "maeklong_dam": {"name": "เขื่อนแม่กลอง (K.10 ท่าม่วง)", "basin": "mae_klong", "warning": 1200, "critical": 2000, "default": 1000},
 
-    # ลุ่มน้ำบางปะกง (HII RID / Fallback)
+    # ลุ่มน้ำบางปะกง (ค่าสำรอง)
     "khundan": {"name": "เขื่อนขุนด่านปราการชล", "basin": "bang_pakong", "warning": 100, "critical": 200, "default": 50},
     "bangpakong_gate": {"name": "ปตร. แม่น้ำบางปะกง", "basin": "bang_pakong", "warning": 400, "critical": 600, "default": 310}
 }
 
 def fetch_html_auto_encoding(url, timeout=15):
-    """ฟังก์ชันกลางดึงหน้าเว็บพร้อมตรวจจับรหัสภาษาไทย"""
+    """ฟังก์ชันกลางดึงหน้าเว็บพร้อมตรวจจับรหัสภาษาไทยอัตโนมัติ"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Referer": "https://tiwrm.hii.or.th/"
@@ -125,7 +125,7 @@ def fetch_all_dams():
     return dam_results
 
 # ==============================================================================
-# 4. ดึงเขื่อนแม่กลองจาก API ตรง (POST: http://mkmonitor.ddns.net/api/v1/wf02)
+# 4. ดึงเขื่อนแม่กลองผ่าน Session API (POST: http://mkmonitor.ddns.net/api/v1/wf02)
 # ==============================================================================
 def scrape_maeklong_monitor():
     base_page = "http://mkmonitor.ddns.net/waterflow"
@@ -139,7 +139,6 @@ def scrape_maeklong_monitor():
         "Referer": base_page
     }
 
-    # เวลาปัจจุบันประเทศไทย (UTC+7)
     tz_th = timezone(timedelta(hours=7))
     now_th = datetime.now(tz_th)
 
@@ -154,37 +153,27 @@ def scrape_maeklong_monitor():
     session = requests.Session()
 
     try:
-        # 1. แวะเก็บ Cookie session
         session.get(base_page, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
-
-        # 2. ยิง Request ดึงตัวเลข
         resp = session.post(api_url, headers=headers, json=payload, timeout=12)
         print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
         if resp.status_code == 200:
             data = resp.json()
             charts = data.get("charts", {}) if isinstance(data, dict) else {}
-            print(f"🔍 [MK Monitor Charts Keys]: {list(charts.keys()) if isinstance(charts, dict) else 'Not a dict'}")
 
-            # สกัดหาอาเรย์ตัวเลขจาก charts (data, datasets, หรือคีย์ตัวเลข)
             flow_series = []
-
-            # กรณีที่ 1: charts["data"]
             if "data" in charts and isinstance(charts["data"], list):
                 flow_series = charts["data"]
-            # กรณีที่ 2: charts["datasets"][0]["data"]
             elif "datasets" in charts and isinstance(charts["datasets"], list) and len(charts["datasets"]) > 0:
                 first_ds = charts["datasets"][0]
                 if isinstance(first_ds, dict) and "data" in first_ds:
                     flow_series = first_ds["data"]
-            # กรณีที่ 3: วนหาอาร์เรย์ที่มีตัวเลขทั้งหมดที่ไม่ใช่ label
             elif isinstance(charts, dict):
                 for k, v in charts.items():
                     if k not in ["label", "labels"] and isinstance(v, list) and len(v) > 0:
                         flow_series = v
                         break
 
-            # ดึงค่าตัวเลขล่าสุดในชุดข้อมูล (คัดกรองเฉพาะตัวเลขจริง)
             valid_numbers = []
             for item in flow_series:
                 try:
@@ -194,12 +183,9 @@ def scrape_maeklong_monitor():
                     pass
 
             if valid_numbers:
-                # ดึงตัวเลขชั่วโมงล่าสุด
                 latest_flow = valid_numbers[-1]
                 mk_results["maeklong_dam"] = round(latest_flow)
                 print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
-            else:
-                print("   ⚠️️ [MK Monitor API] ไม่พบตัวเลขระบายน้ำในอ็อบเจกต์ charts")
     except Exception as e:
         print(f"⚠️️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
 
@@ -209,21 +195,23 @@ def scrape_maeklong_monitor():
 # 5. รวบรวมข้อมูลและ Upsert ลง Supabase
 # ==============================================================================
 def sync_water_data():
+    tz_th = timezone(timedelta(hours=7))
+    now_th = datetime.now(tz_th)
+
     print(f"\n=======================================================")
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] กำลังเริ่มกระบวนการซิงค์ข้อมูลน้ำ...")
+    print(f"[{now_th.strftime('%Y-%m-%d %H:%M:%S')}] กำลังเริ่มกระบวนการซิงค์ข้อมูลน้ำ (เวลาไทย)...")
     print(f"=======================================================")
 
     flow_data = scrape_hii_chaopraya()
     dam_data = fetch_all_dams()
     mk_data = scrape_maeklong_monitor()
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = now_th.isoformat()
     payload = []
 
     for sid, conf in STATIONS_CONFIG.items():
         flow_value = conf["default"]
 
-        # จัดลำดับข้อมูลจริงก่อนเสมอ
         if sid in mk_data:
             flow_value = mk_data[sid]
         elif sid in flow_data:
@@ -231,7 +219,6 @@ def sync_water_data():
         elif sid in dam_data:
             flow_value = dam_data[sid]
 
-        # คำนวณสถานะเกณฑ์เตือนภัย
         if flow_value >= conf["critical"]:
             status = "critical"
         elif flow_value >= conf["warning"]:
