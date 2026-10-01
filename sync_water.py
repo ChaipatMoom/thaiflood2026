@@ -195,25 +195,32 @@ def scrape_maeklong_monitor():
             if "แม่กลอง" not in html and "K.10" not in html:
                 html = resp.content.decode("utf-8", errors="ignore")
 
-            # ดึง Text ล้วนเพื่อส่องดูโครงสร้างคำศัพท์
-            text_only = re.sub(r"<[^>]+>", " ", html)
-            clean_text = " ".join(text_only.split())
-            
-            # พิมพ์ตัวอย่างข้อความ 400 ตัวอักษรแรกที่มีคำว่า แม่กลอง หรือ K.10
-            match_area = re.search(r"(?:แม่กลอง|K\.?10).{0,400}", clean_text, re.IGNORECASE)
-            if match_area:
-                print(f"🔍 [MK Text Found]: {match_area.group(0)}")
-            else:
-                print(f"🔍 [MK Snippet]: {clean_text[:300]}")
+            # 1. ตัดโค้ดสไตล์ CSS, Script และ Comments ออกเด็ดขาด
+            clean_html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
+            clean_html = re.sub(r"<style[^>]*>.*?</style>", "", clean_html, flags=re.DOTALL | re.IGNORECASE)
+            clean_html = re.sub(r"<!--.*?-->", "", clean_html, flags=re.DOTALL)
+            clean_html = re.sub(r"/\*.*?\*/", "", clean_html, flags=re.DOTALL)
 
-            # ดึงตัวเลขอัตราไหลจริง
-            matches = re.finditer(r"([0-9]{2,4}(?:\.[0-9]+)?)\s*(?:ลบ\.ม|cms|m3/s)", clean_text, re.IGNORECASE)
-            for m in matches:
-                val = float(m.group(1))
-                if 50 <= val <= 3500:
-                    mk_results["maeklong_dam"] = round(val)
+            # 2. ค้นหาข้อมูลเฉพาะภายในแท็กตาราง <table> เท่านั้น
+            tables = re.findall(r"<table[^>]*>.*?</table>", clean_html, re.DOTALL | re.IGNORECASE)
+            search_text = "".join(tables) if tables else clean_html
+
+            # แปลงเป็นข้อความล้วน
+            text_only = re.sub(r"<[^>]+>", " ", search_text)
+            clean_text = " ".join(text_only.split())
+
+            # 3. ค้นหาขอบเขตตัวเลขรอบคำว่า แม่กลอง หรือ K.10
+            match_area = re.search(r"(?:แม่กลอง|K\.?10).{0,150}", clean_text, re.IGNORECASE)
+            if match_area:
+                snippet = match_area.group(0)
+                print(f"   🔍 [MK Target Snippet]: {snippet}")
+                nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", snippet)]
+                valid = [n for n in nums if 50.0 <= n <= 3500.0]
+                if valid:
+                    mk_results["maeklong_dam"] = round(valid[0])
                     print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
-                    break
+            else:
+                print("   ⚠️ ไม่พบข้อมูลเขื่อนแม่กลองภายในตาราง")
     except Exception as e:
         print(f"⚠️ ดึงข้อมูลจาก mkmonitor.ddns.net ขัดข้อง: {e}")
 
