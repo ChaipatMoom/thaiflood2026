@@ -195,20 +195,25 @@ def scrape_maeklong_monitor():
             if "แม่กลอง" not in html and "K.10" not in html:
                 html = resp.content.decode("utf-8", errors="ignore")
 
-            # กรองแท็ก HTML ออกเพื่อดูเฉพาะข้อความธรรมดา
-            plain_text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
-            plain_text = re.sub(r"<style[^>]*>.*?</style>", "", plain_text, flags=re.DOTALL | re.IGNORECASE)
-            plain_text = re.sub(r"<[^>]+>", " ", plain_text)
-            clean_words = " ".join(plain_text.split())
+            # ดึง Text ล้วนเพื่อส่องดูโครงสร้างคำศัพท์
+            text_only = re.sub(r"<[^>]+>", " ", html)
+            clean_text = " ".join(text_only.split())
+            
+            # พิมพ์ตัวอย่างข้อความ 400 ตัวอักษรแรกที่มีคำว่า แม่กลอง หรือ K.10
+            match_area = re.search(r"(?:แม่กลอง|K\.?10).{0,400}", clean_text, re.IGNORECASE)
+            if match_area:
+                print(f"🔍 [MK Text Found]: {match_area.group(0)}")
+            else:
+                print(f"🔍 [MK Snippet]: {clean_text[:300]}")
 
-            # แสดงตัวอย่างข้อความ 500 ตัวอักษรแรกใน Console เพื่อดูคีย์เวิร์ด
-            print(f"🔍 [MK Monitor Raw Text]: {clean_words[:500]}")
-
-            # ดึงตัวเลขที่มีหน่วย ลบ.ม./วิ หรือ cms
-            match = re.search(r"([0-9]{2,4}(?:\.[0-9]+)?)\s*(?:ลบ\.ม|cms|m3/s)", clean_words, re.IGNORECASE)
-            if match:
-                mk_results["maeklong_dam"] = round(float(match.group(1)))
-                print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
+            # ดึงตัวเลขอัตราไหลจริง
+            matches = re.finditer(r"([0-9]{2,4}(?:\.[0-9]+)?)\s*(?:ลบ\.ม|cms|m3/s)", clean_text, re.IGNORECASE)
+            for m in matches:
+                val = float(m.group(1))
+                if 50 <= val <= 3500:
+                    mk_results["maeklong_dam"] = round(val)
+                    print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
+                    break
     except Exception as e:
         print(f"⚠️ ดึงข้อมูลจาก mkmonitor.ddns.net ขัดข้อง: {e}")
 
