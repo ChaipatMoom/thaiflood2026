@@ -128,15 +128,18 @@ def fetch_all_dams():
 # 4. ดึงเขื่อนแม่กลองจาก API ตรง (POST: http://mkmonitor.ddns.net/api/v1/wf02)
 # ==============================================================================
 def scrape_maeklong_monitor():
-    url = "http://mkmonitor.ddns.net/api/v1/wf02"
+    base_page = "http://mkmonitor.ddns.net/waterflow"
+    api_url = "http://mkmonitor.ddns.net/api/v1/wf02"
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/json",
         "Origin": "http://mkmonitor.ddns.net",
-        "Referer": "http://mkmonitor.ddns.net/waterflow"
+        "Referer": base_page
     }
 
+    # เวลาปัจจุบันของประเทศไทย (UTC+7)
     tz_th = timezone(timedelta(hours=7))
     now_th = datetime.now(tz_th)
     
@@ -148,37 +151,52 @@ def scrape_maeklong_monitor():
     }
 
     mk_results = {}
+    session = requests.Session()
+
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=12)
+        # 1. แวะดึงหน้าเว็บหลักก่อน เพื่อให้ Session เก็บ Cookie 'makelong'
+        session.get(base_page, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
+
+        # 2. ยิงคำขอ POST พร้อม Cookie ที่ได้มาอัตโนมัติ
+        resp = session.post(api_url, headers=headers, json=payload, timeout=12)
         print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
         if resp.status_code == 200:
+            print(f"🔍 [MK Monitor Raw JSON]: {resp.text[:300]}")
             data = resp.json()
-            records = data if isinstance(data, list) else data.get("data", [])
 
-            if records:
-                latest = records[-1]
-                flow_val = None
-                for k in ["discharge", "waterflow", "flow", "val", "value", "q"]:
-                    if k in latest:
-                        flow_val = latest[k]
+            # สกัดหาข้อมูลที่เป็น List จากทุกรูปแบบโครงสร้าง
+            records = []
+            if isinstance(data, list):
+                records = data
+            elif isinstance(data, dict):
+                for val in data.values():
+                    if isinstance(val, list) and len(val) > 0:
+                        records = val
                         break
 
-                if flow_val is None:
+            if records:
+                # ตรวจหาตัวเลขอัตราการไหล (100 - 4,000 ลบ.ม./วิ) ในเรคคอร์ดล่าสุด
+                latest = records[-1]
+                flow_val = None
+
+                if isinstance(latest, dict):
                     for v in reversed(list(latest.values())):
                         try:
-                            flow_val = float(v)
-                            break
+                            f = float(v)
+                            if 100.0 <= f <= 4000.0:
+                                flow_val = f
+                                break
                         except (ValueError, TypeError):
                             pass
+                elif isinstance(latest, (int, float)):
+                    flow_val = float(latest)
 
                 if flow_val is not None:
-                    val = float(flow_val)
-                    if val > 0:
-                        mk_results["maeklong_dam"] = round(val)
-                        print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
+                    mk_results["maeklong_dam"] = round(flow_val)
+                    print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
             else:
-                print("   ⚠️ [MK Monitor API] ได้รับข้อมูลเป็นลิสต์ว่าง")
+                print("   ⚠️ [MK Monitor API] ไม่พบอาร์เรย์ข้อมูลใน Response")
     except Exception as e:
         print(f"⚠️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
 
