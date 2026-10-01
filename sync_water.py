@@ -180,33 +180,37 @@ def fetch_all_dams():
 # 4. ดึงเขื่อนแม่กลอง (K.10) จาก MK Monitor
 # ==============================================================================
 def scrape_maeklong_monitor():
-    html = fetch_html_auto_encoding("http://mkmonitor.ddns.net/", timeout=10)
+    url = "http://mkmonitor.ddns.net/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"
+    }
+
     mk_results = {}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        print(f"📡 [MK Monitor DDNS] HTTP Status: {resp.status_code}")
 
-    if html:
-        print("📡 [MK Monitor DDNS] เชื่อมต่อสำเร็จ")
-        clean_html = re.sub(r"สำนักงานชลประทานที่\s*\d+", "", html)
+        if resp.status_code == 200:
+            html = resp.content.decode("tis-620", errors="ignore")
+            if "แม่กลอง" not in html and "K.10" not in html:
+                html = resp.content.decode("utf-8", errors="ignore")
 
-        # วิธีที่ 1: ค้นหาในแถวตาราง <tr>
-        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", clean_html, re.DOTALL | re.IGNORECASE)
-        for r in rows:
-            if "แม่กลอง" in r or "K.10" in r or "K10" in r:
-                nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", re.sub(r"<[^>]+>", " ", r))]
-                valid = [n for n in nums if 50.0 <= n <= 3500.0]
-                if valid:
-                    mk_results["maeklong_dam"] = round(valid[-1])
-                    print(f"   ✓ [MK Monitor Row] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
-                    break
+            # กรองแท็ก HTML ออกเพื่อดูเฉพาะข้อความธรรมดา
+            plain_text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
+            plain_text = re.sub(r"<style[^>]*>.*?</style>", "", plain_text, flags=re.DOTALL | re.IGNORECASE)
+            plain_text = re.sub(r"<[^>]+>", " ", plain_text)
+            clean_words = " ".join(plain_text.split())
 
-        # วิธีที่ 2: หากไม่ได้อยู่ในตาราง <tr> ให้ค้นหาบล็อกที่อยู่ลึกเกิน 200 ตัวอักษร (ข้ามหัวเว็บ)
-        if "maeklong_dam" not in mk_results:
-            matches = re.finditer(r"(?:เขื่อนแม่กลอง|K\.?\s*10).{30,800}?(?:ระบาย|ท้ายเขื่อน|ท้าย|Q|ปริมาณน้ำ).*?([0-9]{2,4}(?:,[0-9]{3})*(?:\.[0-9]+)?)", clean_html, re.DOTALL | re.IGNORECASE)
-            for m in matches:
-                val = float(m.group(1).replace(",", ""))
-                if 50.0 <= val <= 3500.0:
-                    mk_results["maeklong_dam"] = round(val)
-                    print(f"   ✓ [MK Monitor Block] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
-                    break
+            # แสดงตัวอย่างข้อความ 500 ตัวอักษรแรกใน Console เพื่อดูคีย์เวิร์ด
+            print(f"🔍 [MK Monitor Raw Text]: {clean_words[:500]}")
+
+            # ดึงตัวเลขที่มีหน่วย ลบ.ม./วิ หรือ cms
+            match = re.search(r"([0-9]{2,4}(?:\.[0-9]+)?)\s*(?:ลบ\.ม|cms|m3/s)", clean_words, re.IGNORECASE)
+            if match:
+                mk_results["maeklong_dam"] = round(float(match.group(1)))
+                print(f"   ✓ [MK Monitor Match] เขื่อนแม่กลอง: {mk_results['maeklong_dam']} ลบ.ม./วิ")
+    except Exception as e:
+        print(f"⚠️ ดึงข้อมูลจาก mkmonitor.ddns.net ขัดข้อง: {e}")
 
     return mk_results
 
