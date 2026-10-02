@@ -63,33 +63,85 @@ def fetch_html_auto_encoding(url, timeout=15):
     return ""
 
 # ==============================================================================
-# 2. ดึงสถานีลุ่มน้ำเจ้าพระยา (C.2, C.13, C.29A, พระรามหก, ป่าสัก)
+# 2. ดึงสถานีลุ่มน้ำเจ้าพระยาจาก ThaiWater v3 API (C.2, C.13, C.29A, พระรามหก)
 # ==============================================================================
-def scrape_hii_chaopraya():
-    url = "https://tiwrm.hii.or.th/DATA/REPORT/php/chart/chaopraya/2013/chaopraya.php"
-    html = fetch_html_auto_encoding(url)
-    hii_results = {}
+def scrape_thaiwater_v3():
+    tz_th = timezone(timedelta(hours=7))
+    now_th = datetime.now(tz_th)
+    today_str = now_th.strftime("%Y-%m-%d")
 
-    if html:
-        print("📡 [HII TIWRM Flow] เชื่อมต่อสำเร็จ")
-        station_rules = {
-            "C2": (r"C\.?\s*2\b.*?([0-9]{3,4}(?:,[0-9]{3})*)", 300),
-            "C13": (r"C\.?\s*13\b.*?([0-9]{2,4}(?:,[0-9]{3})*)", 100),
-            "C29A": (r"C\.?\s*29A?\b.*?([0-9]{3,4}(?:,[0-9]{3})*)", 500),
-            "rama6": (r"(?:พระรามหก|S\.?\s*26).*?([0-9]{2,4}(?:,[0-9]{3})*)", 10),
-            "pasak": (r"(?:ป่าสัก|pasak).*?([0-9]{1,4}(?:,[0-9]{3})*)", 5)
-        }
+    url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
+    params = {
+        "basin_id": "999",
+        "start_date": f"{today_str} 00:00",
+        "end_date": f"{today_str} 23:59"
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://waterchart.thaiwater.net/",
+        "Accept": "application/json, text/plain, */*"
+    }
 
-        for sid, (pattern, min_valid) in station_rules.items():
-            matches = re.finditer(pattern, html, re.DOTALL | re.IGNORECASE)
-            for m in matches:
-                val = float(m.group(1).replace(",", ""))
-                if val >= min_valid:
-                    hii_results[sid] = round(val)
-                    print(f"   ✓ [HII Flow Match] {sid}: {hii_results[sid]} ลบ.ม./วิ")
-                    break
+    tw_results = {}
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        print(f"📡 [ThaiWater v3 API] HTTP Status: {resp.status_code}")
 
-    return hii_results
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("waterlevel_data", {}).get("data", [])
+            print(f"   ✓ โหลดข้อมูลสำเร็จ: พบทั้งหมด {len(items)} สถานี")
+
+            for item in items:
+                disc_raw = item.get("discharge")
+                if disc_raw is None or str(disc_raw).strip() == "":
+                    continue
+
+                try:
+                    flow_val = round(float(str(disc_raw).replace(",", "")))
+                except (ValueError, TypeError):
+                    continue
+
+                # ดึงชื่อและรหัสสถานี
+                station = item.get("station", {}) or {}
+                st_name_th = ""
+                if isinstance(station.get("tele_station_name"), dict):
+                    st_name_th = station["tele_station_name"].get("th", "")
+                elif isinstance(station.get("tele_station_name"), str):
+                    st_name_th = station.get("tele_station_name")
+
+                st_code = str(station.get("tele_station_oldcode") or station.get("tele_station_code") or "")
+                combined_ident = f"{st_code} {st_name_th}".upper()
+
+                # 1. สถานี C.2 (นครสวรรค์ / ค่ายจิรประวัติ)
+                if "C2" not in tw_results:
+                    if ("C.2" in combined_ident or "C2" in combined_ident or "ค่ายจิรประวัติ" in combined_ident):
+                        if "C.29" not in combined_ident and "C29" not in combined_ident:
+                            tw_results["C2"] = flow_val
+                            print(f"   ✓ [ThaiWater Match] C.2 ({st_name_th}): {flow_val} ลบ.ม./วิ")
+
+                # 2. สถานี C.13 (เขื่อนเจ้าพระยา / ชัยนาท)
+                if "C13" not in tw_results:
+                    if ("C.13" in combined_ident or "C13" in combined_ident or "เขื่อนเจ้าพระยา" in combined_ident):
+                        tw_results["C13"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] C.13 ({st_name_th}): {flow_val} ลบ.ม./วิ")
+
+                # 3. สถานี C.29A (บางไทร / อยุธยา)
+                if "C29A" not in tw_results:
+                    if ("C.29A" in combined_ident or "C29A" in combined_ident or "C.29" in combined_ident or "บางไทร" in combined_ident):
+                        tw_results["C29A"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] C.29A ({st_name_th}): {flow_val} ลบ.ม./วิ")
+
+                # 4. สถานี พระรามหก (S.26 / ป่าสัก)
+                if "rama6" not in tw_results:
+                    if ("S.26" in combined_ident or "S26" in combined_ident or "พระรามหก" in combined_ident or "พระราม 6" in combined_ident):
+                        tw_results["rama6"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] พระรามหก ({st_name_th}): {flow_val} ลบ.ม./วิ")
+
+    except Exception as e:
+        print(f"⚠️ ดึงข้อมูล ThaiWater v3 API ขัดข้อง: {e}")
+
+    return tw_results
 
 # ==============================================================================
 # 3. ดึงเขื่อนขนาดใหญ่ กฟผ. (ศรีนครินทร์, วชิราลงกรณ)
