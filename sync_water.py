@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import json
 import requests
 from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
@@ -14,7 +15,7 @@ if sys.platform == "win32":
 # ==============================================================================
 # 1. การตั้งค่าการเชื่อมต่อฐานข้อมูล Supabase
 # ==============================================================================
-SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ycchozbszqxxmvxwdlag.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_KEY:
@@ -24,17 +25,17 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # 10 สถานียุทธศาสตร์หลัก เกณฑ์เตือนภัย (ลบ.ม./วิ) และค่าสำรอง (Fallback)
 STATIONS_CONFIG = {
-    # ลุ่มน้ำเจ้าพระยา (HII TIWRM)
-    "C2": {"name": "แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)", "basin": "chao_phraya", "warning": 2000, "critical": 2800, "default": 1904},
-    "C13": {"name": "เขื่อนเจ้าพระยา C.13 (ชัยนาท)", "basin": "chao_phraya", "warning": 2000, "critical": 2700, "default": 2200},
-    "pasak": {"name": "เขื่อนป่าสักชลสิทธิ์", "basin": "chao_phraya", "warning": 400, "critical": 600, "default": 115},
-    "rama6": {"name": "เขื่อนพระรามหก (แม่น้ำป่าสัก)", "basin": "chao_phraya", "warning": 500, "critical": 700, "default": 410},
-    "C29A": {"name": "สถานี C.29A บางไทร (อยุธยา)", "basin": "chao_phraya", "warning": 2500, "critical": 3000, "default": 2250},
+    # ลุ่มน้ำเจ้าพระยา (ThaiWater v3 API)
+    "C2": {"name": "แม่น้ำเจ้าพระยา C.2 (นครสวรรค์)", "basin": "chao_phraya", "warning": 2000, "critical": 2800, "default": 2398},
+    "C13": {"name": "เขื่อนเจ้าพระยา C.13 (ชัยนาท)", "basin": "chao_phraya", "warning": 2000, "critical": 2700, "default": 2500},
+    "pasak": {"name": "เขื่อนป่าสักชลสิทธิ์", "basin": "chao_phraya", "warning": 400, "critical": 600, "default": 261},
+    "rama6": {"name": "เขื่อนพระรามหก (แม่น้ำป่าสัก)", "basin": "chao_phraya", "warning": 500, "critical": 700, "default": 566},
+    "C29A": {"name": "สถานี C.29A บางไทร (อยุธยา)", "basin": "chao_phraya", "warning": 2500, "critical": 3000, "default": 2756},
 
     # ลุ่มน้ำแม่กลอง (HII EGAT & MK Monitor API)
-    "srinagarind": {"name": "เขื่อนศรีนครินทร์ (กาญจนบุรี)", "basin": "mae_klong", "warning": 400, "critical": 600, "default": 180},
-    "vajiralongkorn": {"name": "เขื่อนวชิราลงกรณ (กาญจนบุรี)", "basin": "mae_klong", "warning": 300, "critical": 500, "default": 120},
-    "maeklong_dam": {"name": "เขื่อนแม่กลอง (K.10 ท่าม่วง)", "basin": "mae_klong", "warning": 1200, "critical": 2000, "default": 1000},
+    "srinagarind": {"name": "เขื่อนศรีนครินทร์ (กาญจนบุรี)", "basin": "mae_klong", "warning": 400, "critical": 600, "default": 0},
+    "vajiralongkorn": {"name": "เขื่อนวชิราลงกรณ (กาญจนบุรี)", "basin": "mae_klong", "warning": 300, "critical": 500, "default": 0},
+    "maeklong_dam": {"name": "เขื่อนแม่กลอง (K.10 ท่าม่วง)", "basin": "mae_klong", "warning": 1200, "critical": 2000, "default": 1854},
 
     # ลุ่มน้ำบางปะกง (ค่าสำรอง)
     "khundan": {"name": "เขื่อนขุนด่านปราการชล", "basin": "bang_pakong", "warning": 100, "critical": 200, "default": 50},
@@ -63,11 +64,9 @@ def fetch_html_auto_encoding(url, timeout=15):
     return ""
 
 # ==============================================================================
-# 2. ดึงสถานีลุ่มน้ำเจ้าพระยาจาก ThaiWater v3 API (C.2, C.13, C.29A, พระรามหก)
+# 2. ดึงสถานีลุ่มน้ำเจ้าพระยาจาก ThaiWater v3 API (C.2, C.13, C.29A, พระรามหก, ป่าสัก)
 # ==============================================================================
 def scrape_thaiwater_v3():
-    import json
-
     url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
     params = {
         "basin_code": "6,7,8,9,10,11,12,13,14,15"
@@ -92,7 +91,7 @@ def scrape_thaiwater_v3():
                 item_str = json.dumps(item, ensure_ascii=False).upper()
                 disc_raw = item.get("discharge") or item.get("flow_rate")
 
-                # [จุดที่ 1] ดักจับ C.29A เป็นพิเศษก่อนโดนข้ามค่า null
+                # ตรวจจับ C.29A ก่อนกรองค่าว่าง
                 if "C29A" not in tw_results:
                     if any(k in item_str for k in ["C.29A", "C29A", "C.29", "ศูนย์ศิลปาชีพบางไทร", "บางไทร"]):
                         if disc_raw is not None and str(disc_raw).strip() != "":
@@ -102,7 +101,6 @@ def scrape_thaiwater_v3():
                             except (ValueError, TypeError):
                                 pass
 
-                # กรองสถานีที่ไม่มีอัตราการไหลออก
                 if disc_raw is None or str(disc_raw).strip() == "":
                     continue
 
@@ -117,27 +115,27 @@ def scrape_thaiwater_v3():
                         tw_results["pasak"] = flow_val
                         print(f"   ✓ [ThaiWater Match] ป่าสักชลสิทธิ์: {flow_val} ลบ.ม./วิ")
 
-                # 2. สถานี C.2 (นครสวรรค์)
+                # 2. C.2 (นครสวรรค์)
                 if "C2" not in tw_results:
                     if any(k in item_str for k in ["C.2", "C2", "ค่ายจิรประวัติ"]) and "C.29" not in item_str and "C29" not in item_str:
                         tw_results["C2"] = flow_val
                         print(f"   ✓ [ThaiWater Match] C.2 (นครสวรรค์): {flow_val} ลบ.ม./วิ")
 
-                # 3. สถานี C.13 (เขื่อนเจ้าพระยา)
+                # 3. C.13 (เขื่อนเจ้าพระยา)
                 if "C13" not in tw_results:
                     if any(k in item_str for k in ["C.13", "C13", "เขื่อนเจ้าพระยา"]):
                         tw_results["C13"] = flow_val
                         print(f"   ✓ [ThaiWater Match] C.13 (เขื่อนเจ้าพระยา): {flow_val} ลบ.ม./วิ")
 
-                # 4. สถานี เขื่อนพระรามหก
+                # 4. เขื่อนพระรามหก
                 if "rama6" not in tw_results:
                     if any(k in item_str for k in ["พระรามหก", "พระราม 6", "S.26", "S26"]):
                         tw_results["rama6"] = flow_val
                         print(f"   ✓ [ThaiWater Match] พระรามหก: {flow_val} ลบ.ม./วิ")
 
-            # [จุดที่ 2] Water Balance Fallback: ถ้าเซ็นเซอร์บางไทรเป็น null ให้คำนวณจากสมดุลน้ำจริง
+            # Water Balance Fallback: ถ้าเซ็นเซอร์บางไทรไม่มีตัวเลข ใช้อัตราสมดุลน้ำจริง
             if "C29A" not in tw_results and "C13" in tw_results and "rama6" in tw_results:
-                estimated_flow = tw_results["C13"] + tw_results["rama6"] - 310  # หักน้ำผันลงท่าจีน ~310
+                estimated_flow = tw_results["C13"] + tw_results["rama6"] - 310
                 tw_results["C29A"] = max(estimated_flow, 1500)
                 print(f"   ✓ [C.29A Water Balance] คำนวณสมดุลน้ำบางไทร: {tw_results['C29A']} ลบ.ม./วิ")
 
@@ -145,6 +143,39 @@ def scrape_thaiwater_v3():
         print(f"⚠️ ดึงข้อมูล ThaiWater v3 API ขัดข้อง: {e}")
 
     return tw_results
+
+# ==============================================================================
+# 3. ดึงเขื่อนขนาดใหญ่ กฟผ. (ศรีนครินทร์, วชิราลงกรณ)
+# ==============================================================================
+def fetch_all_dams():
+    dam_results = {}
+    egat_html = fetch_html_auto_encoding("https://tiwrm.hii.or.th/DATA/REPORT/php/egat_dam.php")
+
+    if egat_html:
+        print("📡 [HII EGAT Dams] เชื่อมต่อสำเร็จ")
+        egat_targets = {
+            "ศรีนครินทร์": {"sid": "srinagarind", "max_mld": 45.0},
+            "วชิราลงกรณ": {"sid": "vajiralongkorn", "max_mld": 55.0}
+        }
+
+        chunks = re.split(r"<tr[^>]*>", egat_html, flags=re.IGNORECASE)
+        for chunk in chunks:
+            if "รวม" in chunk or "เฉลี่ย" in chunk:
+                continue
+
+            for name, conf in egat_targets.items():
+                sid = conf["sid"]
+                if name in chunk and sid not in dam_results:
+                    clean_text = re.sub(r"<[^>]+>", " ", chunk)
+                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", clean_text)]
+                    valid = [n for n in nums if 0.0 <= n <= conf["max_mld"]]
+                    if valid:
+                        mld = valid[-1]
+                        m3s = round((mld * 1_000_000) / 86400)
+                        dam_results[sid] = m3s
+                        print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
+
+    return dam_results
 
 # ==============================================================================
 # 4. ดึงเขื่อนแม่กลองผ่าน Session API (POST: http://mkmonitor.ddns.net/api/v1/wf02)
@@ -176,6 +207,7 @@ def scrape_maeklong_monitor():
 
     try:
         session.get(base_page, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
+        # ตั้ง timeout 25 วินาทีเพื่อป้องกัน Read timed out
         resp = session.post(api_url, headers=headers, json=payload, timeout=25)
         print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
@@ -209,7 +241,7 @@ def scrape_maeklong_monitor():
                 mk_results["maeklong_dam"] = round(latest_flow)
                 print(f"   ✓ [MK Monitor API Match] เขื่อนแม่กลอง (K.10): {mk_results['maeklong_dam']} ลบ.ม./วิ")
     except Exception as e:
-        print(f"⚠️️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
+        print(f"⚠️ ดึงข้อมูลจาก MK Monitor API ขัดข้อง: {e}")
 
     return mk_results
 
@@ -224,7 +256,7 @@ def sync_water_data():
     print(f"[{now_th.strftime('%Y-%m-%d %H:%M:%S')}] กำลังเริ่มกระบวนการซิงค์ข้อมูลน้ำ (เวลาไทย)...")
     print(f"=======================================================")
 
-    flow_data = scrape_thaiwater_v3()   # ดึงจาก ThaiWater v3 API
+    flow_data = scrape_thaiwater_v3()
     dam_data = fetch_all_dams()
     mk_data = scrape_maeklong_monitor()
 
