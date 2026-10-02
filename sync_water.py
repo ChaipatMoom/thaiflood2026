@@ -263,24 +263,26 @@ def scrape_thaiwater_watergates():
 
             for item in items:
                 item_str = json.dumps(item, ensure_ascii=False).upper()
-                disc_raw = item.get("discharge") or item.get("flow_rate") or item.get("watergate_discharge")
 
-                if disc_raw is None or str(disc_raw).strip() == "":
-                    continue
-
-                try:
-                    flow_val = round(float(str(disc_raw).replace(",", "")))
-                except (ValueError, TypeError):
-                    continue
-
-                # ปตร. แม่น้ำบางปะกง
-                if "bangpakong_gate" not in gate_results:
-                    if any(k in item_str for k in ["ปตร. แม่น้ำบางปะกง", "ปตร.แม่น้ำบางปะกง", "ปตร.บางปะกง", "บางปะกง"]):
-                        gate_results["bangpakong_gate"] = flow_val
-                        print(f"   ✓ [ThaiWater Watergate Match] ปตร. แม่น้ำบางปะกง: {flow_val} ลบ.ม./วิ")
+                # ดักจับประตูระบายน้ำบางปะกงก่อนตรวจจับค่าว่าง
+                if "บางปะกง" in item_str and "bangpakong_gate" not in gate_results:
+                    print(f"   🔍 [DEBUG Watergate Data]: {item}")
+                    disc_raw = (
+                        item.get("discharge") or 
+                        item.get("flow_rate") or 
+                        item.get("watergate_discharge") or 
+                        item.get("watergate_outflow")
+                    )
+                    if disc_raw is not None and str(disc_raw).strip() != "":
+                        try:
+                            flow_val = round(float(str(disc_raw).replace(",", "")))
+                            gate_results["bangpakong_gate"] = flow_val
+                            print(f"   ✓ [ThaiWater Watergate Match] ปตร. แม่น้ำบางปะกง: {flow_val} ลบ.ม./วิ")
+                        except (ValueError, TypeError):
+                            pass
 
     except Exception as e:
-        print(f"⚠️️ ดึงข้อมูล ThaiWater Watergate API ขัดข้อง: {e}")
+        print(f"⚠️ ดึงข้อมูล ThaiWater Watergate API ขัดข้อง: {e}")
 
     return gate_results
 
