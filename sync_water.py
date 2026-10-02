@@ -66,16 +66,15 @@ def fetch_html_auto_encoding(url, timeout=15):
 # 2. ดึงสถานีลุ่มน้ำเจ้าพระยาจาก ThaiWater v3 API (C.2, C.13, C.29A, พระรามหก)
 # ==============================================================================
 def scrape_thaiwater_v3():
-    tz_th = timezone(timedelta(hours=7))
-    now_th = datetime.now(tz_th)
-    today_str = now_th.strftime("%Y-%m-%d")
+    import json
 
     url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
+    
+    # ดึงครอบคลุมลุ่มน้ำภาคเหนือ ภาคกลาง ตะวันตก (ปิง วัง ยม น่าน เจ้าพระยา ป่าสัก ท่าจีน แม่กลอง บางปะกง)
     params = {
-        "basin_id": "999",
-        "start_date": f"{today_str} 00:00",
-        "end_date": f"{today_str} 23:59"
+        "basin_code": "6,7,8,9,10,11,12,13,14,15"
     }
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Referer": "https://waterchart.thaiwater.net/",
@@ -93,7 +92,8 @@ def scrape_thaiwater_v3():
             print(f"   ✓ โหลดข้อมูลสำเร็จ: พบทั้งหมด {len(items)} สถานี")
 
             for item in items:
-                disc_raw = item.get("discharge")
+                # ตรวจสอบค่าการไหล (discharge)
+                disc_raw = item.get("discharge") or item.get("flow_rate")
                 if disc_raw is None or str(disc_raw).strip() == "":
                     continue
 
@@ -102,41 +102,33 @@ def scrape_thaiwater_v3():
                 except (ValueError, TypeError):
                     continue
 
-                # ดึงชื่อและรหัสสถานี
-                station = item.get("station", {}) or {}
-                st_name_th = ""
-                if isinstance(station.get("tele_station_name"), dict):
-                    st_name_th = station["tele_station_name"].get("th", "")
-                elif isinstance(station.get("tele_station_name"), str):
-                    st_name_th = station.get("tele_station_name")
-
-                st_code = str(station.get("tele_station_oldcode") or station.get("tele_station_code") or "")
-                combined_ident = f"{st_code} {st_name_th}".upper()
+                # แปลงอ็อบเจกต์สถานีเป็นข้อความ เพื่อค้นหาคีย์เวิร์ดได้ครอบคลุมทุกฟิลด์
+                item_str = json.dumps(item, ensure_ascii=False).upper()
 
                 # 1. สถานี C.2 (นครสวรรค์ / ค่ายจิรประวัติ)
                 if "C2" not in tw_results:
-                    if ("C.2" in combined_ident or "C2" in combined_ident or "ค่ายจิรประวัติ" in combined_ident):
-                        if "C.29" not in combined_ident and "C29" not in combined_ident:
+                    if ("C.2" in item_str or "C2" in item_str or "ค่ายจิรประวัติ" in item_str):
+                        if "C.29" not in item_str and "C29" not in item_str:
                             tw_results["C2"] = flow_val
-                            print(f"   ✓ [ThaiWater Match] C.2 ({st_name_th}): {flow_val} ลบ.ม./วิ")
+                            print(f"   ✓ [ThaiWater Match] C.2 (นครสวรรค์): {flow_val} ลบ.ม./วิ")
 
                 # 2. สถานี C.13 (เขื่อนเจ้าพระยา / ชัยนาท)
                 if "C13" not in tw_results:
-                    if ("C.13" in combined_ident or "C13" in combined_ident or "เขื่อนเจ้าพระยา" in combined_ident):
+                    if ("C.13" in item_str or "C13" in item_str or "เขื่อนเจ้าพระยา" in item_str):
                         tw_results["C13"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] C.13 ({st_name_th}): {flow_val} ลบ.ม./วิ")
+                        print(f"   ✓ [ThaiWater Match] C.13 (เขื่อนเจ้าพระยา): {flow_val} ลบ.ม./วิ")
 
                 # 3. สถานี C.29A (บางไทร / อยุธยา)
                 if "C29A" not in tw_results:
-                    if ("C.29A" in combined_ident or "C29A" in combined_ident or "C.29" in combined_ident or "บางไทร" in combined_ident):
+                    if ("C.29A" in item_str or "C29A" in item_str or "บางไทร" in item_str):
                         tw_results["C29A"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] C.29A ({st_name_th}): {flow_val} ลบ.ม./วิ")
+                        print(f"   ✓ [ThaiWater Match] C.29A (บางไทร): {flow_val} ลบ.ม./วิ")
 
-                # 4. สถานี พระรามหก (S.26 / ป่าสัก)
+                # 4. สถานี เขื่อนพระรามหก (S.26 / ท่าเรือ อยุธยา)
                 if "rama6" not in tw_results:
-                    if ("S.26" in combined_ident or "S26" in combined_ident or "พระรามหก" in combined_ident or "พระราม 6" in combined_ident):
+                    if ("พระรามหก" in item_str or "พระราม 6" in item_str or "S.26" in item_str or "S26" in item_str):
                         tw_results["rama6"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] พระรามหก ({st_name_th}): {flow_val} ลบ.ม./วิ")
+                        print(f"   ✓ [ThaiWater Match] พระรามหก: {flow_val} ลบ.ม./วิ")
 
     except Exception as e:
         print(f"⚠️ ดึงข้อมูล ThaiWater v3 API ขัดข้อง: {e}")
