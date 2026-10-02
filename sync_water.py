@@ -16,9 +16,7 @@ if sys.platform == "win32":
 # 1. การตั้งค่าการเชื่อมต่อฐานข้อมูล Supabase
 # ==============================================================================
 # ดึงค่า URL หากใน Secrets ส่งค่าว่างมา ให้สลับไปใช้ URL จริงทันที
-SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip()
-if not SUPABASE_URL:
-    SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
+SUPABASE_URL = "https://ycchozbszqxxmvxwdlag.supabase.co"
 
 SUPABASE_KEY = (os.environ.get("SUPABASE_KEY") or "").strip()
 
