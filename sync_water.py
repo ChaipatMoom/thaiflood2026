@@ -169,18 +169,15 @@ def scrape_thaiwater_dams():
         print(f"📡 [ThaiWater Dam API] HTTP Status: {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
-            
-            # ดึงก้อนข้อมูลเขื่อน
             raw_data = data.get("data") if isinstance(data, dict) and "data" in data else data
 
-            # กระจายโครงสร้าง (Flattening) ให้เป็นลิสต์ของเขื่อนแต่ละแห่งโดยตรง
+            # กระจายข้อมูลให้อยู่ในรูปแบบ Flattened List
             dam_list = []
             if isinstance(raw_data, dict):
                 for v in raw_data.values():
                     if isinstance(v, list):
                         dam_list.extend([x for x in v if isinstance(x, dict)])
                     elif isinstance(v, dict):
-                        # หากซ้อน dict อีกชั้น ให้ดึงลิสต์ข้างในออกมา
                         for sub_v in v.values():
                             if isinstance(sub_v, list):
                                 dam_list.extend([x for x in sub_v if isinstance(x, dict)])
@@ -189,7 +186,6 @@ def scrape_thaiwater_dams():
             elif isinstance(raw_data, list):
                 for x in raw_data:
                     if isinstance(x, dict):
-                        # ตรวจสอบว่ามีลิสต์เขื่อนซ้อนในรายภาคหรือไม่
                         sub_lists = [sub_v for sub_v in x.values() if isinstance(sub_v, list)]
                         if sub_lists:
                             for sl in sub_lists:
@@ -199,6 +195,14 @@ def scrape_thaiwater_dams():
 
             print(f"   ✓ โหลดข้อมูลเขื่อนสำเร็จ: กระจายข้อมูลได้ทั้งหมด {len(dam_list)} เขื่อน")
 
+            # ฟังก์ชันช่วยดึงค่าแรกที่มีอยู่จริง (ป้องกัน 0 โดนกลืนเป็น None)
+            def extract_val(d, keys):
+                for k in keys:
+                    v = d.get(k)
+                    if v is not None and str(v).strip() != "":
+                        return v
+                return None
+
             for item in dam_list:
                 if not isinstance(item, dict):
                     continue
@@ -206,9 +210,9 @@ def scrape_thaiwater_dams():
                 item_str = json.dumps(item, ensure_ascii=False).upper()
 
                 flow_val = None
-                # 1. ตรวจสอบค่า discharge (ลบ.ม./วิ) โดยตรง
-                disc_raw = item.get("discharge") or item.get("dam_discharge") or item.get("flow_rate")
-                if disc_raw is not None and str(disc_raw).strip() != "":
+                # 1. ตรวจสอบค่า discharge (ลบ.ม./วิ)
+                disc_raw = extract_val(item, ["discharge", "dam_discharge", "flow_rate"])
+                if disc_raw is not None:
                     try:
                         flow_val = round(float(str(disc_raw).replace(",", "")))
                     except (ValueError, TypeError):
@@ -216,15 +220,8 @@ def scrape_thaiwater_dams():
 
                 # 2. ตรวจสอบปริมาณน้ำระบายรายวัน (ล้าน ลบ.ม./วัน) -> แปลงเป็น ลบ.ม./วิ
                 if flow_val is None:
-                    rel_raw = (
-                        item.get("dam_released") or 
-                        item.get("released") or 
-                        item.get("dam_outflow") or 
-                        item.get("outflow") or
-                        item.get("dam_daily_outflow") or
-                        item.get("dam_daily_release")
-                    )
-                    if rel_raw is not None and str(rel_raw).strip() != "":
+                    rel_raw = extract_val(item, ["dam_released", "released", "dam_outflow", "outflow", "dam_daily_outflow", "dam_daily_release"])
+                    if rel_raw is not None:
                         try:
                             mld = float(str(rel_raw).replace(",", ""))
                             flow_val = round((mld * 1_000_000) / 86400)
@@ -240,9 +237,9 @@ def scrape_thaiwater_dams():
                         dam_results["khundan"] = flow_val
                         print(f"   ✓ [ThaiWater Dam Match] เขื่อนขุนด่านปราการชล: {flow_val} ลบ.ม./วิ")
 
-                # 2. เขื่อนนฤบดินทรจินดา
+                # 2. เขื่อนนฤบดินทรจินดา (รองรับทั้ง นฤบดินทร, นฤบดินทร์, โสมง)
                 if "narubodintr" not in dam_results:
-                    if any(k in item_str for k in ["นฤบดินทร", "ห้วยโสมง", "NARUBODIN"]):
+                    if any(k in item_str for k in ["นฤบดินทร", "นฤบดินทร์", "ห้วยโสมง", "โสมง", "NARUBODIN"]):
                         dam_results["narubodintr"] = flow_val
                         print(f"   ✓ [ThaiWater Dam Match] เขื่อนนฤบดินทรจินดา: {flow_val} ลบ.ม./วิ")
 
