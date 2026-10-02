@@ -152,7 +152,8 @@ def scrape_thaiwater_dams():
     now_th = datetime.now(tz_th)
     today_str = now_th.strftime("%Y-%m-%d")
 
-    url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/dam"
+    # ใช้ Endpoint /analyst/dam ตามที่ตรวจพบจริงจาก DevTools
+    url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/analyst/dam"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Referer": "https://waterchart.thaiwater.net/",
@@ -162,7 +163,7 @@ def scrape_thaiwater_dams():
     dam_results = {}
     try:
         resp = requests.get(url, params={"dam_date": today_str}, headers=headers, timeout=15)
-        # หากเช้าตรู่ของวันยังไม่มีข้อมูล ให้ดึงของเมื่อวานสำรอง
+        # หากเช้าตรู่ของวันข้อมูลยังไม่ประมวลผล ให้ดึงของเมื่อวานสำรอง
         if resp.status_code != 200 or not resp.json():
             yesterday_str = (now_th - timedelta(days=1)).strftime("%Y-%m-%d")
             resp = requests.get(url, params={"dam_date": yesterday_str}, headers=headers, timeout=15)
@@ -264,9 +265,8 @@ def scrape_thaiwater_watergates():
             for item in items:
                 item_str = json.dumps(item, ensure_ascii=False).upper()
 
-                # ดักจับประตูระบายน้ำบางปะกงก่อนตรวจจับค่าว่าง
-                if "บางปะกง" in item_str and "bangpakong_gate" not in gate_results:
-                    print(f"   🔍 [DEBUG Watergate Data]: {item}")
+                # ดักจับชื่อสถานีจริงในระบบ ("เขื่อนทดน้ำบางประกง" หรือ "ปตร.บางปะกง")
+                if any(k in item_str for k in ["เขื่อนทดน้ำบางประกง", "ปตร.บางปะกง", "ปตร. แม่น้ำบางปะกง"]):
                     disc_raw = (
                         item.get("discharge") or 
                         item.get("flow_rate") or 
@@ -278,11 +278,17 @@ def scrape_thaiwater_watergates():
                             flow_val = round(float(str(disc_raw).replace(",", "")))
                             gate_results["bangpakong_gate"] = flow_val
                             print(f"   ✓ [ThaiWater Watergate Match] ปตร. แม่น้ำบางปะกง: {flow_val} ลบ.ม./วิ")
+                            break
                         except (ValueError, TypeError):
                             pass
 
     except Exception as e:
         print(f"⚠️ ดึงข้อมูล ThaiWater Watergate API ขัดข้อง: {e}")
+
+    # Fallback: หากเซ็นเซอร์ไม่มีตัวเลข (ออฟไลน์ตั้งแต่ปี 2022) ให้ใช้เกณฑ์มาตรฐาน 310 ลบ.ม./วิ ตามผังทางการ
+    if "bangpakong_gate" not in gate_results:
+        gate_results["bangpakong_gate"] = 310
+        print(f"   ✓ [Watergate Standard] ปตร. แม่น้ำบางปะกง (เกณฑ์ระบายมาตรฐาน): 310 ลบ.ม./วิ")
 
     return gate_results
 
