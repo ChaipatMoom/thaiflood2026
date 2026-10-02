@@ -152,7 +152,6 @@ def scrape_thaiwater_dams():
     now_th = datetime.now(tz_th)
     today_str = now_th.strftime("%Y-%m-%d")
 
-    # ใช้ Endpoint /analyst/dam ตามที่ตรวจพบจริงจาก DevTools
     url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/analyst/dam"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
@@ -163,7 +162,6 @@ def scrape_thaiwater_dams():
     dam_results = {}
     try:
         resp = requests.get(url, params={"dam_date": today_str}, headers=headers, timeout=15)
-        # หากเช้าตรู่ของวันข้อมูลยังไม่ประมวลผล ให้ดึงของเมื่อวานสำรอง
         if resp.status_code != 200 or not resp.json():
             yesterday_str = (now_th - timedelta(days=1)).strftime("%Y-%m-%d")
             resp = requests.get(url, params={"dam_date": yesterday_str}, headers=headers, timeout=15)
@@ -171,26 +169,44 @@ def scrape_thaiwater_dams():
         print(f"📡 [ThaiWater Dam API] HTTP Status: {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
-            items = []
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                items = data.get("dam_daily", {}).get("data", []) or data.get("dam", {}).get("data", []) or data.get("data", [])
-                if not items:
-                    for v in data.values():
-                        if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
-                            items = v
-                            break
-                        elif isinstance(v, dict) and "data" in v and isinstance(v["data"], list):
-                            items = v["data"]
-                            break
+            
+            # ดึงก้อนข้อมูลเขื่อน
+            raw_data = data.get("data") if isinstance(data, dict) and "data" in data else data
 
-            print(f"   ✓ โหลดข้อมูลเขื่อนสำเร็จ: พบทั้งหมด {len(items)} เขื่อน")
+            # กระจายโครงสร้าง (Flattening) ให้เป็นลิสต์ของเขื่อนแต่ละแห่งโดยตรง
+            dam_list = []
+            if isinstance(raw_data, dict):
+                for v in raw_data.values():
+                    if isinstance(v, list):
+                        dam_list.extend([x for x in v if isinstance(x, dict)])
+                    elif isinstance(v, dict):
+                        # หากซ้อน dict อีกชั้น ให้ดึงลิสต์ข้างในออกมา
+                        for sub_v in v.values():
+                            if isinstance(sub_v, list):
+                                dam_list.extend([x for x in sub_v if isinstance(x, dict)])
+                            elif isinstance(sub_v, dict):
+                                dam_list.append(sub_v)
+            elif isinstance(raw_data, list):
+                for x in raw_data:
+                    if isinstance(x, dict):
+                        # ตรวจสอบว่ามีลิสต์เขื่อนซ้อนในรายภาคหรือไม่
+                        sub_lists = [sub_v for sub_v in x.values() if isinstance(sub_v, list)]
+                        if sub_lists:
+                            for sl in sub_lists:
+                                dam_list.extend([item for item in sl if isinstance(item, dict)])
+                        else:
+                            dam_list.append(x)
 
-            for item in items:
+            print(f"   ✓ โหลดข้อมูลเขื่อนสำเร็จ: กระจายข้อมูลได้ทั้งหมด {len(dam_list)} เขื่อน")
+
+            for item in dam_list:
+                if not isinstance(item, dict):
+                    continue
+
                 item_str = json.dumps(item, ensure_ascii=False).upper()
 
                 flow_val = None
+                # 1. ตรวจสอบค่า discharge (ลบ.ม./วิ) โดยตรง
                 disc_raw = item.get("discharge") or item.get("dam_discharge") or item.get("flow_rate")
                 if disc_raw is not None and str(disc_raw).strip() != "":
                     try:
@@ -198,9 +214,16 @@ def scrape_thaiwater_dams():
                     except (ValueError, TypeError):
                         pass
 
-                # หากระบุเป็นปริมาณน้ำระบายรายวัน (ล้าน ลบ.ม./วัน) ให้แปลงเป็น ลบ.ม./วิ
+                # 2. ตรวจสอบปริมาณน้ำระบายรายวัน (ล้าน ลบ.ม./วัน) -> แปลงเป็น ลบ.ม./วิ
                 if flow_val is None:
-                    rel_raw = item.get("dam_released") or item.get("released") or item.get("dam_outflow") or item.get("outflow")
+                    rel_raw = (
+                        item.get("dam_released") or 
+                        item.get("released") or 
+                        item.get("dam_outflow") or 
+                        item.get("outflow") or
+                        item.get("dam_daily_outflow") or
+                        item.get("dam_daily_release")
+                    )
                     if rel_raw is not None and str(rel_raw).strip() != "":
                         try:
                             mld = float(str(rel_raw).replace(",", ""))
@@ -233,7 +256,6 @@ def scrape_thaiwater_dams():
         print(f"⚠️ ดึงข้อมูล ThaiWater Dam API ขัดข้อง: {e}")
 
     return dam_results
-
 # ==============================================================================
 # 4. ดึงประตูระบายน้ำฝั่งบางปะกง (ปตร. แม่น้ำบางปะกง)
 # ==============================================================================
