@@ -120,7 +120,7 @@ def scrape_thaiwater_v3():
 
                 # 3. สถานี C.29A (บางไทร / อยุธยา)
                 if "C29A" not in tw_results:
-                    if ("C.29A" in item_str or "C29A" in item_str or "บางไทร" in item_str):
+                    if any(k in item_str for k in ["C.29A", "C29A", "C.29", "C29", "บางไทร"]):
                         tw_results["C29A"] = flow_val
                         print(f"   ✓ [ThaiWater Match] C.29A (บางไทร): {flow_val} ลบ.ม./วิ")
 
@@ -129,6 +129,12 @@ def scrape_thaiwater_v3():
                     if ("พระรามหก" in item_str or "พระราม 6" in item_str or "S.26" in item_str or "S26" in item_str):
                         tw_results["rama6"] = flow_val
                         print(f"   ✓ [ThaiWater Match] พระรามหก: {flow_val} ลบ.ม./วิ")
+
+                 # 5. สถานี เขื่อนเขื่อนป่าสักชลสิทธิ์
+                if "pasak" not in tw_results:
+                    if any(k in item_str for k in ["ป่าสักชลสิทธิ์", "PASAK"]):
+                        tw_results["pasak"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] ป่าสักชลสิทธิ์: {flow_val} ลบ.ม./วิ")
 
     except Exception as e:
         print(f"⚠️ ดึงข้อมูล ThaiWater v3 API ขัดข้อง: {e}")
@@ -198,7 +204,7 @@ def scrape_maeklong_monitor():
 
     try:
         session.get(base_page, headers={"User-Agent": headers["User-Agent"]}, timeout=10)
-        resp = session.post(api_url, headers=headers, json=payload, timeout=12)
+        resp = session.post(api_url, headers=headers, json=payload, timeout=25)
         print(f"📡 [MK Monitor API] HTTP Status: {resp.status_code}")
 
         if resp.status_code == 200:
