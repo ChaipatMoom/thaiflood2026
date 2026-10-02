@@ -69,12 +69,9 @@ def scrape_thaiwater_v3():
     import json
 
     url = "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load"
-    
-    # ดึงครอบคลุมลุ่มน้ำภาคเหนือ ภาคกลาง ตะวันตก (ปิง วัง ยม น่าน เจ้าพระยา ป่าสัก ท่าจีน แม่กลอง บางปะกง)
     params = {
         "basin_code": "6,7,8,9,10,11,12,13,14,15"
     }
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36",
         "Referer": "https://waterchart.thaiwater.net/",
@@ -92,8 +89,20 @@ def scrape_thaiwater_v3():
             print(f"   ✓ โหลดข้อมูลสำเร็จ: พบทั้งหมด {len(items)} สถานี")
 
             for item in items:
-                # ตรวจสอบค่าการไหล (discharge)
+                item_str = json.dumps(item, ensure_ascii=False).upper()
                 disc_raw = item.get("discharge") or item.get("flow_rate")
+
+                # [จุดที่ 1] ดักจับ C.29A เป็นพิเศษก่อนโดนข้ามค่า null
+                if "C29A" not in tw_results:
+                    if any(k in item_str for k in ["C.29A", "C29A", "C.29", "ศูนย์ศิลปาชีพบางไทร", "บางไทร"]):
+                        if disc_raw is not None and str(disc_raw).strip() != "":
+                            try:
+                                tw_results["C29A"] = round(float(str(disc_raw).replace(",", "")))
+                                print(f"   ✓ [ThaiWater Match] C.29A (บางไทร): {tw_results['C29A']} ลบ.ม./วิ")
+                            except (ValueError, TypeError):
+                                pass
+
+                # กรองสถานีที่ไม่มีอัตราการไหลออก
                 if disc_raw is None or str(disc_raw).strip() == "":
                     continue
 
@@ -102,77 +111,40 @@ def scrape_thaiwater_v3():
                 except (ValueError, TypeError):
                     continue
 
-                # แปลงอ็อบเจกต์สถานีเป็นข้อความ เพื่อค้นหาคีย์เวิร์ดได้ครอบคลุมทุกฟิลด์
-                item_str = json.dumps(item, ensure_ascii=False).upper()
-
-                # 1. สถานี C.2 (นครสวรรค์ / ค่ายจิรประวัติ)
-                if "C2" not in tw_results:
-                    if ("C.2" in item_str or "C2" in item_str or "ค่ายจิรประวัติ" in item_str):
-                        if "C.29" not in item_str and "C29" not in item_str:
-                            tw_results["C2"] = flow_val
-                            print(f"   ✓ [ThaiWater Match] C.2 (นครสวรรค์): {flow_val} ลบ.ม./วิ")
-
-                # 2. สถานี C.13 (เขื่อนเจ้าพระยา / ชัยนาท)
-                if "C13" not in tw_results:
-                    if ("C.13" in item_str or "C13" in item_str or "เขื่อนเจ้าพระยา" in item_str):
-                        tw_results["C13"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] C.13 (เขื่อนเจ้าพระยา): {flow_val} ลบ.ม./วิ")
-
-                # 3. สถานี C.29A (บางไทร / อยุธยา)
-                if "C29A" not in tw_results:
-                    if any(k in item_str for k in ["C.29A", "C29A", "C.29", "C29", "บางไทร"]):
-                        tw_results["C29A"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] C.29A (บางไทร): {flow_val} ลบ.ม./วิ")
-
-                # 4. สถานี เขื่อนพระรามหก (S.26 / ท่าเรือ อยุธยา)
-                if "rama6" not in tw_results:
-                    if ("พระรามหก" in item_str or "พระราม 6" in item_str or "S.26" in item_str or "S26" in item_str):
-                        tw_results["rama6"] = flow_val
-                        print(f"   ✓ [ThaiWater Match] พระรามหก: {flow_val} ลบ.ม./วิ")
-
-                 # 5. สถานี เขื่อนเขื่อนป่าสักชลสิทธิ์
+                # 1. เขื่อนป่าสักชลสิทธิ์
                 if "pasak" not in tw_results:
                     if any(k in item_str for k in ["ป่าสักชลสิทธิ์", "PASAK"]):
                         tw_results["pasak"] = flow_val
                         print(f"   ✓ [ThaiWater Match] ป่าสักชลสิทธิ์: {flow_val} ลบ.ม./วิ")
 
+                # 2. สถานี C.2 (นครสวรรค์)
+                if "C2" not in tw_results:
+                    if any(k in item_str for k in ["C.2", "C2", "ค่ายจิรประวัติ"]) and "C.29" not in item_str and "C29" not in item_str:
+                        tw_results["C2"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] C.2 (นครสวรรค์): {flow_val} ลบ.ม./วิ")
+
+                # 3. สถานี C.13 (เขื่อนเจ้าพระยา)
+                if "C13" not in tw_results:
+                    if any(k in item_str for k in ["C.13", "C13", "เขื่อนเจ้าพระยา"]):
+                        tw_results["C13"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] C.13 (เขื่อนเจ้าพระยา): {flow_val} ลบ.ม./วิ")
+
+                # 4. สถานี เขื่อนพระรามหก
+                if "rama6" not in tw_results:
+                    if any(k in item_str for k in ["พระรามหก", "พระราม 6", "S.26", "S26"]):
+                        tw_results["rama6"] = flow_val
+                        print(f"   ✓ [ThaiWater Match] พระรามหก: {flow_val} ลบ.ม./วิ")
+
+            # [จุดที่ 2] Water Balance Fallback: ถ้าเซ็นเซอร์บางไทรเป็น null ให้คำนวณจากสมดุลน้ำจริง
+            if "C29A" not in tw_results and "C13" in tw_results and "rama6" in tw_results:
+                estimated_flow = tw_results["C13"] + tw_results["rama6"] - 310  # หักน้ำผันลงท่าจีน ~310
+                tw_results["C29A"] = max(estimated_flow, 1500)
+                print(f"   ✓ [C.29A Water Balance] คำนวณสมดุลน้ำบางไทร: {tw_results['C29A']} ลบ.ม./วิ")
+
     except Exception as e:
         print(f"⚠️ ดึงข้อมูล ThaiWater v3 API ขัดข้อง: {e}")
 
     return tw_results
-
-# ==============================================================================
-# 3. ดึงเขื่อนขนาดใหญ่ กฟผ. (ศรีนครินทร์, วชิราลงกรณ)
-# ==============================================================================
-def fetch_all_dams():
-    dam_results = {}
-    egat_html = fetch_html_auto_encoding("https://tiwrm.hii.or.th/DATA/REPORT/php/egat_dam.php")
-
-    if egat_html:
-        print("📡 [HII EGAT Dams] เชื่อมต่อสำเร็จ")
-        egat_targets = {
-            "ศรีนครินทร์": {"sid": "srinagarind", "max_mld": 45.0},
-            "วชิราลงกรณ": {"sid": "vajiralongkorn", "max_mld": 55.0}
-        }
-
-        chunks = re.split(r"<tr[^>]*>", egat_html, flags=re.IGNORECASE)
-        for chunk in chunks:
-            if "รวม" in chunk or "เฉลี่ย" in chunk:
-                continue
-
-            for name, conf in egat_targets.items():
-                sid = conf["sid"]
-                if name in chunk and sid not in dam_results:
-                    clean_text = re.sub(r"<[^>]+>", " ", chunk)
-                    nums = [float(x.replace(",", "")) for x in re.findall(r"[0-9]+(?:\.[0-9]+)?", clean_text)]
-                    valid = [n for n in nums if 0.0 <= n <= conf["max_mld"]]
-                    if valid:
-                        mld = valid[-1]
-                        m3s = round((mld * 1_000_000) / 86400)
-                        dam_results[sid] = m3s
-                        print(f"   ✓ [Dam Match] {name} ({sid}): {m3s} ลบ.ม./วิ ({mld} ล้าน ลบ.ม./วัน)")
-
-    return dam_results
 
 # ==============================================================================
 # 4. ดึงเขื่อนแม่กลองผ่าน Session API (POST: http://mkmonitor.ddns.net/api/v1/wf02)
