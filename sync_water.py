@@ -254,7 +254,7 @@ def sync_water_data():
     print(f"[{now_th.strftime('%Y-%m-%d %H:%M:%S')}] กำลังเริ่มกระบวนการซิงค์ข้อมูลน้ำ (เวลาไทย)...")
     print(f"=======================================================")
 
-    flow_data = scrape_hii_chaopraya()
+    flow_data = scrape_thaiwater_v3()   # ดึงจาก ThaiWater v3 API
     dam_data = fetch_all_dams()
     mk_data = scrape_maeklong_monitor()
 
